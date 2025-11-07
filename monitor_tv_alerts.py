@@ -12,6 +12,14 @@ TZ = ZoneInfo(os.getenv("TZ", "Asia/Riyadh"))
 
 logging.basicConfig(level=logging.INFO)
 app = Flask(__name__)
+# ✅ Test Route to Check Telegram Bot
+@app.route('/test')
+def test():
+    secret = request.args.get('secret')
+    if secret != SHARED_SECRET:
+        return "Unauthorized", 401
+    send_telegram_message("✅ Bot is working and connected successfully!")
+    return "✅ Test message sent to Telegram!"
 
 daily_stats = {}
 
