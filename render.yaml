@@ -1,0 +1,20 @@
+services:
+  - type: web
+    name: tv2tg-alerts
+    env: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn monitor_tv_alerts:app --bind 0.0.0.0:$PORT
+    envVars:
+      - key: TELEGRAM_TOKEN
+        sync: false
+      - key: TELEGRAM_CHAT_ID
+        sync: false
+      - key: SHARED_SECRET
+        value: supersecret123
+      - key: ACCOUNT_BALANCE
+        value: "200"
+      - key: DAILY_LOSS_LIMIT_PCT
+        value: "3"
+      - key: TZ
+        value: Asia/Riyadh
