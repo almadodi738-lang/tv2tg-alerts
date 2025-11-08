@@ -1,84 +1,77 @@
-import os, json, requests
+import os, logging, requests
+from datetime import datetime
 from flask import Flask, request, jsonify
+from zoneinfo import ZoneInfo
 
+# === إعدادات من Environment ===
 TELEGRAM_TOKEN   = os.getenv("TELEGRAM_TOKEN", "")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
-SHARED_SECRET    = os.getenv("SHARED_SECRET", "Admin@1716")
+SHARED_SECRET    = os.getenv("SHARED_SECRET", "supersecret123")
+ACCOUNT_BALANCE  = float(os.getenv("ACCOUNT_BALANCE", "200"))
+DAILY_LOSS_LIMIT_PCT = float(os.getenv("DAILY_LOSS_LIMIT_PCT", "3.0"))
+TZ = ZoneInfo(os.getenv("TZ", "Asia/Riyadh"))
 
+logging.basicConfig(level=logging.INFO)
 app = Flask(__name__)
 
-def tg(text: str) -> bool:
+# === وظائف مساعدة ===
+def tg_send(text: str) -> bool:
     if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_ID:
-        print("Telegram creds missing")
+        app.logger.warning("Telegram creds missing; not sending message")
         return False
+    url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
+    data = {"chat_id": TELEGRAM_CHAT_ID, "text": text}
     try:
-        url  = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
-        data = {"chat_id": TELEGRAM_CHAT_ID, "text": text}
         r = requests.post(url, data=data, timeout=10)
-        if not r.ok: print("TG send error:", r.text)
+        app.logger.info("Telegram status %s: %s", r.status_code, r.text)
         return r.ok
     except Exception as e:
-        print("TG exception:", e)
+        app.logger.exception("Telegram send failed: %s", e)
         return False
+
+def ok(msg):     return (msg, 200)
+def bad(msg):    return (msg, 400)
+def unauth(msg): return (msg, 403)
+
+# === مسارات الخدمة ===
 
 @app.get("/")
 def root():
-    return "OK", 200
+    return ok("OK")
 
 @app.get("/ping")
 def ping():
-    return "pong", 200
+    # مسار صحي بدون أي صلاحيات — لأدوات المراقبة و Render Health Check
+    now = datetime.now(TZ).strftime("%Y-%m-%d %H:%M:%S")
+    return jsonify({"status": "ok", "time": now})
 
 @app.get("/test")
 def test():
-    ok = tg("✅ Test from Render: bot is connected.")
-    return ("sent" if ok else "failed"), 200 if ok else 500
-
-def authorized(req) -> bool:
-    sec = req.args.get("secret")
-    if not sec:
-        try:
-            body = req.get_json(silent=True) or {}
-            sec = body.get("secret")
-        except Exception:
-            sec = None
-    return sec == SHARED_SECRET
+    # اختبار يدوي بإرسال رسالة لتليغرام
+    secret = request.args.get("secret", "")
+    msg    = request.args.get("msg", "Test message from /test")
+    if secret != SHARED_SECRET:
+        return unauth("Unauthorized")
+    ok_send = tg_send(f"✅ Test: {msg} @ {datetime.now(TZ):%Y-%m-%d %H:%M:%S}")
+    return ok("sent" if ok_send else "not sent")
 
 @app.post("/hook")
 def hook():
-    if not authorized(request):
-        return "Unauthorized", 403
+    # وبهوك TradingView أو أي مصدر
+    secret = request.args.get("secret", "") or request.headers.get("X-Secret", "")
+    if secret != SHARED_SECRET:
+        return unauth("Unauthorized")
+    try:
+        payload = request.get_json(force=True, silent=True) or {}
+        text = payload.get("message") or payload.get("alert") or str(payload)
+        if not text:
+            return bad("No message")
+        sent = tg_send(f"📢 Alert: {text}")
+        return ok("sent" if sent else "not sent")
+    except Exception as e:
+        app.logger.exception("hook error: %s", e)
+        return bad("error")
 
-    payload = request.get_json(silent=True) or {}
-    sym   = payload.get("symbol", "UNKNOWN")
-    act   = (payload.get("action") or "").upper()
-    entry = payload.get("entry")
-    sl    = payload.get("sl")
-    tp1   = payload.get("tp1")
-    tp2   = payload.get("tp2")
-    prob  = payload.get("setup_prob")
-    loss  = payload.get("loss_pct")
-
-    msgs = []
-    if loss is not None and float(loss) <= -3:
-        msgs.append("⚠️ قف التداول الآن – وصلت حد الخسارة اليومية")
-    if prob is not None and float(prob) >= 0.80:
-        size_line = ""
-        if entry is not None and sl is not None:
-            try:
-                risk_usd   = 2.0  # 1% من 200$
-                stop_dist  = abs(float(entry) - float(sl))
-                if stop_dist > 0:
-                    size = risk_usd / stop_dist
-                    size_line = f"\nحجم العقد التقريبي: {size:.3f} وحدة (مخاطرة 1%)"
-            except Exception:
-                pass
-        msgs.append(
-            f"✅ ادخل الآن – فرصة قوية للربح\n{sym} {act}\n"
-            f"Entry: {entry}\nSL: {sl}\nTP1: {tp1}\nTP2: {tp2}{size_line}"
-        )
-    if not msgs:
-        msgs.append(f"📩 تنبيه وصل: {json.dumps(payload, ensure_ascii=False)}")
-
-    for m in msgs: tg(m)
-    return jsonify({"ok": True})
+if __name__ == "__main__":
+    port = int(os.getenv("PORT", "8000"))
+    app.run(host="0.0.0.0", port=port, debug=False)
