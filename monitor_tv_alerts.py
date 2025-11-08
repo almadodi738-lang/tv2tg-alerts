@@ -1,59 +1,84 @@
-import os
-import logging
-import requests
-from datetime import datetime
+import os, json, requests
 from flask import Flask, request, jsonify
-from zoneinfo import ZoneInfo
 
-# ==========================
-# Read environment variables
-# ==========================
-TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN", "")
+TELEGRAM_TOKEN   = os.getenv("TELEGRAM_TOKEN", "")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
-SHARED_SECRET = os.getenv("SHARED_SECRET", "Admin@1716")
-ACCOUNT_BALANCE = float(os.getenv("ACCOUNT_BALANCE", "200"))
-DAILY_LOSS_LIMIT_PCT = float(os.getenv("DAILY_LOSS_LIMIT_PCT", "3.0"))
-TZ = ZoneInfo(os.getenv("TZ", "Asia/Riyadh"))
+SHARED_SECRET    = os.getenv("SHARED_SECRET", "Admin@1716")
 
-logging.basicConfig(level=logging.INFO)
 app = Flask(__name__)
 
-# ==========================
-# Telegram send function ✅
-# ==========================
-def send_telegram_message(message):
+def tg(text: str) -> bool:
     if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_ID:
-        logging.error("Telegram credentials are missing!")
-        return
-
-    url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
-    data = {"chat_id": TELEGRAM_CHAT_ID, "text": message}
-
+        print("Telegram creds missing")
+        return False
     try:
-        requests.post(url, data=data)
+        url  = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
+        data = {"chat_id": TELEGRAM_CHAT_ID, "text": text}
+        r = requests.post(url, data=data, timeout=10)
+        if not r.ok: print("TG send error:", r.text)
+        return r.ok
     except Exception as e:
-        logging.error(f"Error sending Telegram message: {e}")
+        print("TG exception:", e)
+        return False
 
-# ==========================
-# Test route ✅
-# ==========================
-@app.route("/test", methods=["GET"])
+@app.get("/")
+def root():
+    return "OK", 200
+
+@app.get("/ping")
+def ping():
+    return "pong", 200
+
+@app.get("/test")
 def test():
-    if request.args.get("secret") != SHARED_SECRET:
+    ok = tg("✅ Test from Render: bot is connected.")
+    return ("sent" if ok else "failed"), 200 if ok else 500
+
+def authorized(req) -> bool:
+    sec = req.args.get("secret")
+    if not sec:
+        try:
+            body = req.get_json(silent=True) or {}
+            sec = body.get("secret")
+        except Exception:
+            sec = None
+    return sec == SHARED_SECRET
+
+@app.post("/hook")
+def hook():
+    if not authorized(request):
         return "Unauthorized", 403
-    send_telegram_message("✅ Bot is working and connected successfully!")
-    return "Test message sent to Telegram!"
 
-# ==========================
-# Home route ✅
-# ==========================
-@app.route("/", methods=["GET"])
-def home():
-    return "TV2TG Alerts Bot is Running ✅"
+    payload = request.get_json(silent=True) or {}
+    sym   = payload.get("symbol", "UNKNOWN")
+    act   = (payload.get("action") or "").upper()
+    entry = payload.get("entry")
+    sl    = payload.get("sl")
+    tp1   = payload.get("tp1")
+    tp2   = payload.get("tp2")
+    prob  = payload.get("setup_prob")
+    loss  = payload.get("loss_pct")
 
-# ==========================
-# Run Flask App
-# ==========================
-if __name__ == "__main__":
-    port = int(os.getenv("PORT", 8000))
-    app.run(host="0.0.0.0", port=port)
+    msgs = []
+    if loss is not None and float(loss) <= -3:
+        msgs.append("⚠️ قف التداول الآن – وصلت حد الخسارة اليومية")
+    if prob is not None and float(prob) >= 0.80:
+        size_line = ""
+        if entry is not None and sl is not None:
+            try:
+                risk_usd   = 2.0  # 1% من 200$
+                stop_dist  = abs(float(entry) - float(sl))
+                if stop_dist > 0:
+                    size = risk_usd / stop_dist
+                    size_line = f"\nحجم العقد التقريبي: {size:.3f} وحدة (مخاطرة 1%)"
+            except Exception:
+                pass
+        msgs.append(
+            f"✅ ادخل الآن – فرصة قوية للربح\n{sym} {act}\n"
+            f"Entry: {entry}\nSL: {sl}\nTP1: {tp1}\nTP2: {tp2}{size_line}"
+        )
+    if not msgs:
+        msgs.append(f"📩 تنبيه وصل: {json.dumps(payload, ensure_ascii=False)}")
+
+    for m in msgs: tg(m)
+    return jsonify({"ok": True})
