@@ -1,1 +1,1 @@
-web: gunicorn app:app --preload --timeout 180
+web: python monitor_tv_alerts.py
