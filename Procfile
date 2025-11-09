@@ -1,1 +1,1 @@
-web: gunicorn monitor_tv_alerts:app --bind 0.0.0.0:$PORT
+web: gunicorn bot:app --preload --timeout 120
