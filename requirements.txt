@@ -1,5 +1,6 @@
-yfinance
-pandas
 flask
 gunicorn
 requests
+yfinance
+pandas
+python-dotenv
