@@ -235,6 +235,19 @@ def reset_session():
         return ("Unauthorized", 403)
     STATE.update({"date": now_ksa().date(), "pnl": 0.0, "wins": 0, "losses": 0, "trades": 0})
     return jsonify({"ok": True, "state": STATE})
+@app.route("/test")
+def test():
+    secret = request.args.get("secret")
+    msg = request.args.get("msg", "No message")
+    if secret != SHARED_SECRET:
+        return jsonify({"status": "error", "message": "Invalid secret"}), 403
+
+    token = TELEGRAM_TOKEN
+    chat_id = TELEGRAM_CHAT_ID
+    send_url = f"https://api.telegram.org/bot{token}/sendMessage"
+    requests.post(send_url, json={"chat_id": chat_id, "text": msg})
+
+    return jsonify({"status": "sent", "message": msg})
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.getenv("PORT", "8000")))
