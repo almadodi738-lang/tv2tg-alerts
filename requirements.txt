@@ -1,6 +1,6 @@
-flask
-gunicorn
-requests
-yfinance
-pandas
-python-dotenv
+Flask==3.0.3
+gunicorn==23.0.0
+requests==2.32.3
+yfinance==0.2.43
+pandas==2.2.2
+numpy==1.26.4
