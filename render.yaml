@@ -1,20 +1,22 @@
 services:
   - type: web
-    name: tv2tg-alerts
+    name: trading-alerts-bot
     env: python
     plan: free
+    region: frankfurt
     buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn monitor_tv_alerts:app --bind 0.0.0.0:$PORT
+    startCommand: gunicorn bot:app --preload --timeout 120
     envVars:
       - key: TELEGRAM_TOKEN
         sync: false
       - key: TELEGRAM_CHAT_ID
         sync: false
       - key: SHARED_SECRET
-        value: supersecret123
+        value: Admin@1716
       - key: ACCOUNT_BALANCE
         value: "200"
+      - key: RISK_PCT
+        value: "1"
       - key: DAILY_LOSS_LIMIT_PCT
         value: "3"
-      - key: TZ
-        value: Asia/Riyadh
+    healthCheckPath: /ping
