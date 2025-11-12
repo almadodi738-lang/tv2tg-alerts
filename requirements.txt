@@ -3,6 +3,4 @@ gunicorn==23.0.0
 requests==2.31.0
 yfinance==0.2.40
 pandas==2.2.2
-numpy==1.25.2
-setuptools==68.2.2
-wheel==0.42.0
+numpy==1.26.4
