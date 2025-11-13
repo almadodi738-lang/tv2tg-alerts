@@ -1,9 +1,7 @@
-Flask==3.0.2
+Flask==2.3.2
+requests==2.31.0
+yfinance==0.2.38
+pandas==1.5.3
+numpy==1.23.5
 gunicorn==21.2.0
-requests
-yfinance==0.2.43
-pandas==2.2.1
-numpy==1.26.4
-pytz
-setuptools==68.2.2
-wheel==0.42.0
+python-dotenv==1.0.0
