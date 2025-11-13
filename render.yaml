@@ -1,11 +1,11 @@
 services:
   - type: web
     name: trading-alerts-bot
-    env: python
+    env: python3.11
     plan: free
     region: frankfurt
     buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn bot:app --preload --timeout 120
+    startCommand: gunicorn bot:app --bind 0.0.0.0:$PORT --preload --timeout 120
 
     envVars:
       - key: TELEGRAM_TOKEN
@@ -13,7 +13,7 @@ services:
       - key: TELEGRAM_CHAT_ID
         sync: false
       - key: SHARED_SECRET
-        value: Admin@1716
+        value: Adming@1716
       - key: ACCOUNT_BALANCE
         value: "200"
       - key: RISK_PCT
