@@ -1,1 +1,1 @@
-web: gunicorn bot:app --preload --timeout 120
+web: gunicorn monitor_tv_alerts:app --preload --timeout 120
