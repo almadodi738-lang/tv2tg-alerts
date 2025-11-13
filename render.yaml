@@ -5,7 +5,8 @@ services:
     plan: free
     region: frankfurt
     buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn monitor_tv_alerts:app --preload --timeout 120
+    startCommand: gunicorn bot:app --preload --timeout 120
+
     envVars:
       - key: TELEGRAM_TOKEN
         sync: false
@@ -19,4 +20,5 @@ services:
         value: "1"
       - key: DAILY_LOSS_LIMIT_PCT
         value: "3"
+
     healthCheckPath: /ping
