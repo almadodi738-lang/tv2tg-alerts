@@ -4,6 +4,7 @@ import requests
 import pandas as pd
 from telegram import Bot
 from flask import Flask
+from threading import Thread
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 CHAT_ID = os.getenv("CHAT_ID")
@@ -18,15 +19,22 @@ app = Flask(__name__)
 def get_data():
     url = f"https://api.twelvedata.com/time_series?symbol={SYMBOL}&interval={INTERVAL}&apikey={DATA_API_KEY}&outputsize=100"
     r = requests.get(url).json()
+
     if "values" not in r:
         raise Exception(r)
+
     df = pd.DataFrame(r["values"])
-    df = df.astype(float)
+
+    # نحول الأعمدة الرقمية فقط
+    for col in ["open", "high", "low", "close"]:
+        df[col] = df[col].astype(float)
+
     df = df[::-1]
     return df
 
 def indicators(df):
     df["ema50"] = df["close"].ewm(span=50).mean()
+
     delta = df["close"].diff()
     gain = delta.where(delta > 0, 0)
     loss = -delta.where(delta < 0, 0)
@@ -34,6 +42,7 @@ def indicators(df):
     avg_loss = loss.rolling(14).mean()
     rs = avg_gain / avg_loss
     df["rsi"] = 100 - (100 / (1 + rs))
+
     return df
 
 def support_resistance(df):
@@ -47,7 +56,6 @@ def analyze():
     support, resistance = support_resistance(df)
 
     last = df.iloc[-1]
-    prev = df.iloc[-2]
 
     trend_up = last["close"] > last["ema50"]
     trend_down = last["close"] < last["ema50"]
@@ -69,26 +77,28 @@ def analyze():
 
 def run_bot():
     bot.send_message(chat_id=CHAT_ID, text="✅ Gold Bot PRO (Filtered Strategy) Started")
+
     while True:
         try:
             result = analyze()
             if result:
                 signal, price, sl, tp, rsi = result
+
                 msg = f"""
 📊 XAU/USD (M15)
 
 Signal: {signal}
 Price: {round(price,2)}
 RSI: {round(rsi,2)}
-Support: {round(sl,2)}
-Resistance: {round(tp,2)}
 
 🎯 TP: {round(tp,2)}
 🛑 SL: {round(sl,2)}
 """
                 bot.send_message(chat_id=CHAT_ID, text=msg)
                 time.sleep(900)
+
             time.sleep(60)
+
         except Exception as e:
             bot.send_message(chat_id=CHAT_ID, text=f"⚠ Error: {e}")
             time.sleep(120)
@@ -98,6 +108,5 @@ def home():
     return "Bot is running"
 
 if __name__ == "__main__":
-    from threading import Thread
     Thread(target=run_bot).start()
     app.run(host="0.0.0.0", port=10000)
