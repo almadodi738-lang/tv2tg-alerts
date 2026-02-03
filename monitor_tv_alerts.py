@@ -1,94 +1,90 @@
 import os
+import time
 import requests
 import asyncio
 from telegram import Bot
-from datetime import datetime
 
-BOT_TOKEN = os.environ.get("BOT_TOKEN")
-CHAT_ID = os.environ.get("CHAT_ID")
-API_KEY = os.environ.get("API_KEY")
-
-bot = Bot(token=BOT_TOKEN)
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+CHAT_ID = os.getenv("CHAT_ID")
+API_KEY = os.getenv("API_KEY")
 
 SYMBOL = "XAUUSD"
 INTERVAL = "15min"
 
-def get_data():
+bot = Bot(token=BOT_TOKEN)
+
+def get_prices():
     url = f"https://www.alphavantage.co/query?function=FX_INTRADAY&from_symbol=XAU&to_symbol=USD&interval={INTERVAL}&apikey={API_KEY}"
     r = requests.get(url).json()
-    data = list(r[f"Time Series FX ({INTERVAL})"].values())
+    data = list(r["Time Series FX (15min)"].values())
     closes = [float(x["4. close"]) for x in data[:100]]
-    highs = [float(x["2. high"]) for x in data[:100]]
-    lows = [float(x["3. low"]) for x in data[:100]]
-    return closes, highs, lows
+    return closes
 
 def rsi(prices, period=14):
     gains = []
     losses = []
-    for i in range(1, period+1):
-        diff = prices[i] - prices[i-1]
-        if diff > 0:
+    for i in range(1, period + 1):
+        diff = prices[i] - prices[i - 1]
+        if diff >= 0:
             gains.append(diff)
+            losses.append(0)
         else:
+            gains.append(0)
             losses.append(abs(diff))
-    avg_gain = sum(gains)/period
-    avg_loss = sum(losses)/period if losses else 0.0001
+    avg_gain = sum(gains) / period
+    avg_loss = sum(losses) / period
+    if avg_loss == 0:
+        return 100
     rs = avg_gain / avg_loss
-    return 100 - (100/(1+rs))
+    return 100 - (100 / (1 + rs))
 
-def support_resistance(highs, lows):
-    return min(lows[:20]), max(highs[:20])
-
-async def send_signal(text):
-    await bot.send_message(chat_id=CHAT_ID, text=text)
+def support_resistance(prices):
+    support = min(prices[-20:])
+    resistance = max(prices[-20:])
+    return support, resistance
 
 async def analyze():
-    closes, highs, lows = get_data()
-    last = closes[0]
-    prev = closes[1]
+    prices = get_prices()
+    last_price = prices[0]
+    rsi_value = rsi(prices)
+    support, resistance = support_resistance(prices)
 
-    r = rsi(closes[::-1])
-    support, resistance = support_resistance(highs, lows)
+    signal = "⏸️ انتظار"
+    tp = sl = "—"
 
-    direction = None
-    sl = tp1 = tp2 = None
+    if rsi_value < 30 and last_price > support:
+        signal = "🟢 شراء"
+        sl = round(support, 2)
+        tp = round(last_price + (last_price - support) * 2, 2)
 
-    if last > prev and r < 35 and last <= support + 2:
-        direction = "BUY"
-        sl = last - 10
-        tp1 = last + 15
-        tp2 = last + 30
+    elif rsi_value > 70 and last_price < resistance:
+        signal = "🔴 بيع"
+        sl = round(resistance, 2)
+        tp = round(last_price - (resistance - last_price) * 2, 2)
 
-    elif last < prev and r > 65 and last >= resistance - 2:
-        direction = "SELL"
-        sl = last + 10
-        tp1 = last - 15
-        tp2 = last - 30
+    msg = f"""
+📊 XAUUSD M15
 
-    if direction:
-        msg = f"""
-📊 GOLD SIGNAL (M15)
---------------------
-Type: {direction}
-Entry: {round(last,2)}
-SL: {round(sl,2)}
-TP1: {round(tp1,2)}
-TP2: {round(tp2,2)}
+السعر: {last_price}
+RSI: {round(rsi_value,2)}
 
-RSI: {round(r,2)}
-Support: {round(support,2)}
-Resistance: {round(resistance,2)}
+الدعم: {round(support,2)}
+المقاومة: {round(resistance,2)}
 
-⏰ {datetime.utcnow().strftime('%Y-%m-%d %H:%M')}
+الإشارة: {signal}
+TP: {tp}
+SL: {sl}
 """
-        await send_signal(msg)
+
+    await bot.send_message(chat_id=CHAT_ID, text=msg)
 
 async def main():
     while True:
         try:
             await analyze()
         except Exception as e:
-            await send_signal(f"⚠️ Error: {e}")
+            await bot.send_message(chat_id=CHAT_ID, text=f"⚠️ خطأ: {e}")
         await asyncio.sleep(900)  # كل 15 دقيقة
 
-asyncio.run(main())
+if __name__ == "__main__":
+    asyncio.run(main())
