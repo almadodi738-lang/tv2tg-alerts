@@ -1,70 +1,59 @@
-import os, logging, requests
-from datetime import datetime, timedelta, timezone
-from flask import Flask, request, jsonify
+import os
+import time
+import requests
+import telegram
 
-# ==== إعدادات من Environment ====
-TELEGRAM_TOKEN   = os.getenv("TELEGRAM_TOKEN", "")
-TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
-SHARED_SECRET    = os.getenv("SHARED_SECRET", "Admin@1716")
-ACCOUNT_BALANCE  = float(os.getenv("ACCOUNT_BALANCE", "200"))
-DAILY_LOSS_LIMIT_PCT = float(os.getenv("DAILY_LOSS_LIMIT_PCT", "3"))
-# توقيت الرياض (+3) بدون الاعتماد على zoneinfo
-KSA_TZ = timezone(timedelta(hours=3))
+# قراءة المتغيرات من Render
+TOKEN = os.getenv("BOT_TOKEN")
+CHAT_ID = os.getenv("CHAT_ID")
+API_KEY = os.getenv("API_KEY")
 
-# ==== إعداد اللوج ====
-logging.basicConfig(level=logging.INFO)
-app = Flask(__name__)
+bot = telegram.Bot(token=TOKEN)
 
-# ==== دالة إرسال رسالة لتليجرام ====
-def tg_send(text: str) -> bool:
-    if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_ID:
-        app.logger.warning("❌ بيانات التليجرام ناقصة (TOKEN أو CHAT_ID)")
-        return False
-    url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
-    data = {"chat_id": TELEGRAM_CHAT_ID, "text": text}
+# رسالة عند تشغيل البوت
+bot.send_message(chat_id=CHAT_ID, text="✅ Bot started successfully")
+
+SYMBOL = "EURUSD"
+INTERVAL = "15min"
+
+def get_data():
+    url = f"https://www.alphavantage.co/query?function=FX_INTRADAY&from_symbol=EUR&to_symbol=USD&interval=15min&apikey={API_KEY}"
+    r = requests.get(url).json()
+    data = list(r["Time Series FX (15min)"].values())
+    closes = [float(x["4. close"]) for x in data[:50]]
+    return closes
+
+def rsi(prices, period=14):
+    gains = []
+    losses = []
+    for i in range(1, period+1):
+        diff = prices[i-1] - prices[i]
+        if diff >= 0:
+            gains.append(diff)
+        else:
+            losses.append(abs(diff))
+    avg_gain = sum(gains)/period
+    avg_loss = sum(losses)/period if losses else 0.0001
+    rs = avg_gain / avg_loss
+    return 100 - (100/(1+rs))
+
+last_signal = ""
+
+while True:
     try:
-        r = requests.post(url, data=data, timeout=10)
-        app.logger.info("📨 Telegram Response: %s - %s", r.status_code, r.text)
-        return r.ok
+        prices = get_data()
+        current_rsi = rsi(prices)
+
+        if current_rsi < 30 and last_signal != "BUY":
+            bot.send_message(chat_id=CHAT_ID, text=f"🟢 BUY SIGNAL\nRSI: {current_rsi:.2f}")
+            last_signal = "BUY"
+
+        elif current_rsi > 70 and last_signal != "SELL":
+            bot.send_message(chat_id=CHAT_ID, text=f"🔴 SELL SIGNAL\nRSI: {current_rsi:.2f}")
+            last_signal = "SELL"
+
+        time.sleep(300)  # كل 5 دقائق
+
     except Exception as e:
-        app.logger.exception("خطأ في إرسال رسالة التليجرام: %s", e)
-        return False
-
-def ok(msg):     return (msg, 200)
-def bad(msg):    return (msg, 400)
-def unauth(msg): return (msg, 403)
-
-# ==== المسارات الرئيسية ====
-@app.get("/")
-def root():
-    return ok("✅ Bot is running successfully")
-
-@app.get("/ping")
-def ping():
-    now = datetime.now(KSA_TZ).strftime("%Y-%m-%d %H:%M:%S")
-    return jsonify({"status": "ok", "time_riyadh": now})
-
-@app.get("/test")
-def test():
-    secret = request.args.get("secret", "")
-    msg    = request.args.get("msg", "Test message")
-    if secret != SHARED_SECRET:
-        return unauth("Unauthorized")
-    sent = tg_send(f"✅ Test: {msg} @ {datetime.now(KSA_TZ):%Y-%m-%d %H:%M:%S}")
-    return ok("✅ Message sent" if sent else "❌ Message failed")
-
-@app.post("/hook")
-def hook():
-    secret = request.args.get("secret") or request.headers.get("X-Secret", "")
-    if secret != SHARED_SECRET:
-        return unauth("Unauthorized")
-    payload = request.get_json(silent=True) or {}
-    text = payload.get("message") or payload.get("alert") or str(payload)
-    if not text:
-        return bad("No message")
-    sent = tg_send(f"📢 TradingView Alert: {text}")
-    return ok("✅ Alert sent" if sent else "❌ Alert failed")
-
-if __name__ == "__main__":
-    port = int(os.getenv("PORT", "8000"))
-    app.run(host="0.0.0.0", port=port, debug=False)
+        bot.send_message(chat_id=CHAT_ID, text=f"⚠️ Error: {e}")
+        time.sleep(60)
