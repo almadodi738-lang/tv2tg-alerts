@@ -29,11 +29,13 @@ def get_data():
     }
 
     r = requests.get(url, params=params).json()
+
     if "values" not in r:
         raise Exception(r)
 
     df = pd.DataFrame(r["values"])
-    for col in ["open","high","low","close"]:
+
+    for col in ["open", "high", "low", "close"]:
         df[col] = df[col].astype(float)
 
     df = df[::-1]
@@ -78,12 +80,12 @@ def analyze():
     breakout_buy = last["close"] > resistance and prev["close"] <= resistance
     breakout_sell = last["close"] < support and prev["close"] >= support
 
-    if trend_up and breakout_buy and last["rsi"] > 50 and bullish:
+    if trend_up and breakout_buy and last["rsi"] > 55 and bullish:
         sl = last["close"] - last["atr"]
         tp = last["close"] + (last["atr"] * 2)
         return "BUY", last["close"], sl, tp, last["rsi"]
 
-    if trend_down and breakout_sell and last["rsi"] < 50 and bearish:
+    if trend_down and breakout_sell and last["rsi"] < 45 and bearish:
         sl = last["close"] + last["atr"]
         tp = last["close"] - (last["atr"] * 2)
         return "SELL", last["close"], sl, tp, last["rsi"]
@@ -98,6 +100,7 @@ def run_bot():
             result = analyze()
             if result:
                 signal, price, sl, tp, rsi = result
+
                 msg = f"""
 📊 XAU/USD (M15)
 
