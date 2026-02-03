@@ -75,7 +75,7 @@ def run_bot():
             if result:
                 signal, price, sl, tp, rsi = result
                 msg = f"""
-📊 XAUUSD (M15)
+📊 XAU/USD (M15)
 
 Signal: {signal}
 Price: {round(price,2)}
