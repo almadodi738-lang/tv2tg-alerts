@@ -9,7 +9,7 @@ BOT_TOKEN = os.getenv("BOT_TOKEN")
 CHAT_ID = os.getenv("CHAT_ID")
 DATA_API_KEY = os.getenv("DATA_API_KEY")
 
-SYMBOL = "XAU/USD"
+SYMBOL = "XAUUSD"
 INTERVAL = "15min"
 
 app = Flask(__name__)
