@@ -1,8 +1,10 @@
 import os
 import time
 import requests
-import asyncio
 from telegram import Bot
+from flask import Flask
+from threading import Thread
+from datetime import datetime
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 CHAT_ID = os.getenv("CHAT_ID")
@@ -12,79 +14,78 @@ SYMBOL = "XAUUSD"
 INTERVAL = "15min"
 
 bot = Bot(token=BOT_TOKEN)
+app = Flask(__name__)
 
-def get_prices():
-    url = f"https://www.alphavantage.co/query?function=FX_INTRADAY&from_symbol=XAU&to_symbol=USD&interval={INTERVAL}&apikey={API_KEY}"
+def get_price_data():
+    url = f"https://www.alphavantage.co/query?function=FX_INTRADAY&from_symbol=XAU&to_symbol=USD&interval=15min&apikey={API_KEY}"
     r = requests.get(url).json()
     data = list(r["Time Series FX (15min)"].values())
-    closes = [float(x["4. close"]) for x in data[:100]]
+    closes = [float(x["4. close"]) for x in data[:50]]
     return closes
 
 def rsi(prices, period=14):
     gains = []
     losses = []
     for i in range(1, period + 1):
-        diff = prices[i] - prices[i - 1]
-        if diff >= 0:
-            gains.append(diff)
-            losses.append(0)
+        change = prices[i] - prices[i-1]
+        if change > 0:
+            gains.append(change)
         else:
-            gains.append(0)
-            losses.append(abs(diff))
-    avg_gain = sum(gains) / period
-    avg_loss = sum(losses) / period
+            losses.append(abs(change))
+    avg_gain = sum(gains)/period if gains else 0
+    avg_loss = sum(losses)/period if losses else 0
     if avg_loss == 0:
         return 100
     rs = avg_gain / avg_loss
-    return 100 - (100 / (1 + rs))
+    return 100 - (100/(1+rs))
 
 def support_resistance(prices):
-    support = min(prices[-20:])
-    resistance = max(prices[-20:])
-    return support, resistance
+    return min(prices), max(prices)
 
-async def analyze():
-    prices = get_prices()
-    last_price = prices[0]
-    rsi_value = rsi(prices)
+def analyze():
+    prices = get_price_data()
+    current_price = prices[0]
+    r = rsi(prices)
     support, resistance = support_resistance(prices)
 
-    signal = "⏸️ انتظار"
-    tp = sl = "—"
+    if r < 30 and current_price > support:
+        return "BUY", current_price, support, resistance, r
+    elif r > 70 and current_price < resistance:
+        return "SELL", current_price, support, resistance, r
+    else:
+        return None
 
-    if rsi_value < 30 and last_price > support:
-        signal = "🟢 شراء"
-        sl = round(support, 2)
-        tp = round(last_price + (last_price - support) * 2, 2)
-
-    elif rsi_value > 70 and last_price < resistance:
-        signal = "🔴 بيع"
-        sl = round(resistance, 2)
-        tp = round(last_price - (resistance - last_price) * 2, 2)
-
-    msg = f"""
-📊 XAUUSD M15
-
-السعر: {last_price}
-RSI: {round(rsi_value,2)}
-
-الدعم: {round(support,2)}
-المقاومة: {round(resistance,2)}
-
-الإشارة: {signal}
-TP: {tp}
-SL: {sl}
-"""
-
-    await bot.send_message(chat_id=CHAT_ID, text=msg)
-
-async def main():
+def run_bot():
+    bot.send_message(chat_id=CHAT_ID, text="🤖 Gold Smart Bot Started")
     while True:
         try:
-            await analyze()
+            result = analyze()
+            if result:
+                signal, price, sup, res, rsi_val = result
+                sl = sup if signal == "BUY" else res
+                tp = res if signal == "BUY" else sup
+
+                msg = f"""
+📊 XAUUSD (M15)
+Signal: {signal}
+Price: {price}
+RSI: {round(rsi_val,2)}
+Support: {sup}
+Resistance: {res}
+
+🎯 TP: {tp}
+🛑 SL: {sl}
+"""
+                bot.send_message(chat_id=CHAT_ID, text=msg)
+            time.sleep(900)
         except Exception as e:
-            await bot.send_message(chat_id=CHAT_ID, text=f"⚠️ خطأ: {e}")
-        await asyncio.sleep(900)  # كل 15 دقيقة
+            bot.send_message(chat_id=CHAT_ID, text=f"⚠️ Error: {e}")
+            time.sleep(60)
+
+@app.route("/")
+def home():
+    return "Bot is running"
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    Thread(target=run_bot).start()
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
