@@ -2,9 +2,9 @@ import requests
 import time
 import telegram
 
-TOKEN = "PUT_YOUR_TELEGRAM_BOT_TOKEN"
-CHAT_ID = "PUT_YOUR_CHAT_ID"
-API_KEY = "PUT_YOUR_ALPHA_VANTAGE_KEY"
+TOKEN = "8237336568:AAEWGejiP3-XCnD_ft942KQodCjX_JoYd10"
+CHAT_ID = "64776285"
+API_KEY = "UIAWK50Q406OIXUS"
 
 bot = telegram.Bot(token=TOKEN)
 
