@@ -2,7 +2,7 @@ import requests
 import time
 import telegram
 
-TOKEN = "8237336568:AAEWGejiP3-XCnD_ft942KQodCjX_JoYd10"
+TOKEN = "8237336568:AAFX-91HZA2mxT7AwXORLeBdoxnvA4CGg9Q"
 CHAT_ID = "64776285"
 API_KEY = "UIAWK50Q406OIXUS"
 
