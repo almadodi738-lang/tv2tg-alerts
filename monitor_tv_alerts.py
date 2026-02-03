@@ -1,6 +1,7 @@
 import os
 import time
 import requests
+import asyncio
 from telegram import Bot
 from flask import Flask
 from threading import Thread
@@ -11,9 +12,6 @@ API_KEY = os.getenv("API_KEY")
 
 bot = Bot(token=BOT_TOKEN)
 app = Flask(__name__)
-
-SYMBOL = "XAUUSD"
-INTERVAL = "15min"
 
 def get_data():
     url = f"https://www.alphavantage.co/query?function=FX_INTRADAY&from_symbol=XAU&to_symbol=USD&interval=15min&apikey={API_KEY}"
@@ -66,10 +64,8 @@ def support_resistance(prices):
     return min(prices), max(prices)
 
 def candle_pattern(c1, c2):
-    # Bullish Engulfing
-    if c2["close"] > c2["open"] and c2["close"] > c1["open"] and c2["open"] < c1["close"]:
+    if c2["close"] > c2["open"] and c2["close"] > c1["open"]:
         return "BULL"
-    # Bearish Engulfing
     if c2["close"] < c2["open"] and c2["open"] > c1["close"]:
         return "BEAR"
     return None
@@ -97,8 +93,8 @@ def analyze():
 
     return None
 
-def run_bot():
-    bot.send_message(chat_id=CHAT_ID, text="✅ Gold Smart Bot PRO Started")
+async def run_bot():
+    await bot.send_message(chat_id=CHAT_ID, text="✅ Gold Smart Bot PRO Started")
 
     while True:
         try:
@@ -114,18 +110,21 @@ RSI: {round(r,2)}
 TP: {round(tp,2)}
 SL: {round(sl,2)}
 """
-                bot.send_message(chat_id=CHAT_ID, text=msg)
+                await bot.send_message(chat_id=CHAT_ID, text=msg)
 
-            time.sleep(900)
+            await asyncio.sleep(900)
 
         except Exception as e:
-            bot.send_message(chat_id=CHAT_ID, text=f"⚠️ Error: {e}")
-            time.sleep(60)
+            await bot.send_message(chat_id=CHAT_ID, text=f"⚠️ Error: {e}")
+            await asyncio.sleep(60)
+
+def start_bot():
+    asyncio.run(run_bot())
 
 @app.route("/")
 def home():
     return "Bot is running"
 
 if __name__ == "__main__":
-    Thread(target=run_bot).start()
+    Thread(target=start_bot).start()
     app.run(host="0.0.0.0", port=10000)
