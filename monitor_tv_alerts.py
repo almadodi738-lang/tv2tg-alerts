@@ -1,115 +1,94 @@
 import os
-import time
 import requests
 import asyncio
-from datetime import datetime
 from telegram import Bot
+from datetime import datetime
 
-# ====== متغيرات البيئة من Render ======
-TOKEN = os.getenv("BOT_TOKEN")
-CHAT_ID = os.getenv("CHAT_ID")
-API_KEY = os.getenv("API_KEY")
+BOT_TOKEN = os.environ.get("BOT_TOKEN")
+CHAT_ID = os.environ.get("CHAT_ID")
+API_KEY = os.environ.get("API_KEY")
+
+bot = Bot(token=BOT_TOKEN)
 
 SYMBOL = "XAUUSD"
 INTERVAL = "15min"
 
-bot = Bot(token=TOKEN)
-
-# ====== جلب البيانات ======
-def get_prices():
+def get_data():
     url = f"https://www.alphavantage.co/query?function=FX_INTRADAY&from_symbol=XAU&to_symbol=USD&interval={INTERVAL}&apikey={API_KEY}"
     r = requests.get(url).json()
-    data = list(r["Time Series FX (15min)"].values())[:50]
-    closes = [float(x["4. close"]) for x in data]
-    highs = [float(x["2. high"]) for x in data]
-    lows = [float(x["3. low"]) for x in data]
+    data = list(r[f"Time Series FX ({INTERVAL})"].values())
+    closes = [float(x["4. close"]) for x in data[:100]]
+    highs = [float(x["2. high"]) for x in data[:100]]
+    lows = [float(x["3. low"]) for x in data[:100]]
     return closes, highs, lows
 
-# ====== RSI ======
 def rsi(prices, period=14):
-    gains, losses = [], []
+    gains = []
+    losses = []
     for i in range(1, period+1):
         diff = prices[i] - prices[i-1]
-        if diff >= 0:
+        if diff > 0:
             gains.append(diff)
         else:
             losses.append(abs(diff))
     avg_gain = sum(gains)/period
     avg_loss = sum(losses)/period if losses else 0.0001
-    rs = avg_gain/avg_loss
+    rs = avg_gain / avg_loss
     return 100 - (100/(1+rs))
 
-# ====== دعم ومقاومة ======
 def support_resistance(highs, lows):
-    support = min(lows[:10])
-    resistance = max(highs[:10])
-    return support, resistance
+    return min(lows[:20]), max(highs[:20])
 
-# ====== تحليل الشمعة ======
-def candle_signal(op, hi, lo, cl):
-    body = abs(cl - op)
-    upper = hi - max(op, cl)
-    lower = min(op, cl) - lo
-    if lower > body*2:
-        return "bullish"
-    if upper > body*2:
-        return "bearish"
-    return "neutral"
+async def send_signal(text):
+    await bot.send_message(chat_id=CHAT_ID, text=text)
 
-# ====== التحليل الكامل ======
-def analyze():
-    closes, highs, lows = get_prices()
-    price = closes[0]
-    r = rsi(closes)
-    sup, res = support_resistance(highs, lows)
-    candle = candle_signal(closes[1], highs[0], lows[0], closes[0])
+async def analyze():
+    closes, highs, lows = get_data()
+    last = closes[0]
+    prev = closes[1]
 
-    if r < 30 and candle == "bullish" and price <= sup*1.002:
-        sl = price - 10
-        tp1 = price + 15
-        tp2 = price + 30
-        return f"""🟢 BUY SIGNAL (GOLD)
-Price: {price}
-RSI: {round(r,2)}
-Support: {round(sup,2)}
+    r = rsi(closes[::-1])
+    support, resistance = support_resistance(highs, lows)
 
+    direction = None
+    sl = tp1 = tp2 = None
+
+    if last > prev and r < 35 and last <= support + 2:
+        direction = "BUY"
+        sl = last - 10
+        tp1 = last + 15
+        tp2 = last + 30
+
+    elif last < prev and r > 65 and last >= resistance - 2:
+        direction = "SELL"
+        sl = last + 10
+        tp1 = last - 15
+        tp2 = last - 30
+
+    if direction:
+        msg = f"""
+📊 GOLD SIGNAL (M15)
+--------------------
+Type: {direction}
+Entry: {round(last,2)}
 SL: {round(sl,2)}
 TP1: {round(tp1,2)}
 TP2: {round(tp2,2)}
-"""
 
-    if r > 70 and candle == "bearish" and price >= res*0.998:
-        sl = price + 10
-        tp1 = price - 15
-        tp2 = price - 30
-        return f"""🔴 SELL SIGNAL (GOLD)
-Price: {price}
 RSI: {round(r,2)}
-Resistance: {round(res,2)}
+Support: {round(support,2)}
+Resistance: {round(resistance,2)}
 
-SL: {round(sl,2)}
-TP1: {round(tp1,2)}
-TP2: {round(tp2,2)}
+⏰ {datetime.utcnow().strftime('%Y-%m-%d %H:%M')}
 """
+        await send_signal(msg)
 
-    return None
-
-# ====== إرسال ======
-async def send(msg):
-    await bot.send_message(chat_id=CHAT_ID, text=msg)
-
-# ====== تشغيل ======
 async def main():
-    await send("🟢 Gold Smart Bot Started")
-    last = ""
     while True:
         try:
-            signal = analyze()
-            if signal and signal != last:
-                await send(signal)
-                last = signal
+            await analyze()
         except Exception as e:
-            await send(f"⚠️ Error: {e}")
-        time.sleep(300)
+            await send_signal(f"⚠️ Error: {e}")
+        await asyncio.sleep(900)  # كل 15 دقيقة
 
 asyncio.run(main())
