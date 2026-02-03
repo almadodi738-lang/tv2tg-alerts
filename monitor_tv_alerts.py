@@ -2,7 +2,6 @@ import os
 import time
 import requests
 import pandas as pd
-from telegram import Bot
 from flask import Flask
 from threading import Thread
 
@@ -13,20 +12,28 @@ DATA_API_KEY = os.getenv("DATA_API_KEY")
 SYMBOL = "XAU/USD"
 INTERVAL = "15min"
 
-bot = Bot(token=BOT_TOKEN)
 app = Flask(__name__)
 
-def get_data():
-    url = f"https://api.twelvedata.com/time_series?symbol={SYMBOL}&interval={INTERVAL}&apikey={DATA_API_KEY}&outputsize=100"
-    r = requests.get(url).json()
+def send_telegram(message):
+    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+    payload = {"chat_id": CHAT_ID, "text": message}
+    requests.post(url, data=payload)
 
+def get_data():
+    url = "https://api.twelvedata.com/time_series"
+    params = {
+        "symbol": SYMBOL,
+        "interval": INTERVAL,
+        "apikey": DATA_API_KEY,
+        "outputsize": 200
+    }
+
+    r = requests.get(url, params=params).json()
     if "values" not in r:
         raise Exception(r)
 
     df = pd.DataFrame(r["values"])
-
-    # نحول الأعمدة الرقمية فقط
-    for col in ["open", "high", "low", "close"]:
+    for col in ["open","high","low","close"]:
         df[col] = df[col].astype(float)
 
     df = df[::-1]
@@ -34,6 +41,7 @@ def get_data():
 
 def indicators(df):
     df["ema50"] = df["close"].ewm(span=50).mean()
+    df["ema200"] = df["close"].ewm(span=200).mean()
 
     delta = df["close"].diff()
     gain = delta.where(delta > 0, 0)
@@ -43,11 +51,14 @@ def indicators(df):
     rs = avg_gain / avg_loss
     df["rsi"] = 100 - (100 / (1 + rs))
 
+    df["tr"] = df["high"] - df["low"]
+    df["atr"] = df["tr"].rolling(14).mean()
+
     return df
 
 def support_resistance(df):
-    support = df["low"].tail(30).min()
-    resistance = df["high"].tail(30).max()
+    support = df["low"].tail(50).min()
+    resistance = df["high"].tail(50).max()
     return support, resistance
 
 def analyze():
@@ -56,51 +67,54 @@ def analyze():
     support, resistance = support_resistance(df)
 
     last = df.iloc[-1]
+    prev = df.iloc[-2]
 
-    trend_up = last["close"] > last["ema50"]
-    trend_down = last["close"] < last["ema50"]
+    trend_up = last["ema50"] > last["ema200"]
+    trend_down = last["ema50"] < last["ema200"]
 
     bullish = last["close"] > last["open"]
     bearish = last["close"] < last["open"]
 
-    if trend_up and last["rsi"] < 35 and last["close"] <= support * 1.002 and bullish:
-        sl = support
-        tp = last["close"] + (last["close"] - sl) * 2
+    breakout_buy = last["close"] > resistance and prev["close"] <= resistance
+    breakout_sell = last["close"] < support and prev["close"] >= support
+
+    if trend_up and breakout_buy and last["rsi"] > 50 and bullish:
+        sl = last["close"] - last["atr"]
+        tp = last["close"] + (last["atr"] * 2)
         return "BUY", last["close"], sl, tp, last["rsi"]
 
-    if trend_down and last["rsi"] > 65 and last["close"] >= resistance * 0.998 and bearish:
-        sl = resistance
-        tp = last["close"] - (sl - last["close"]) * 2
+    if trend_down and breakout_sell and last["rsi"] < 50 and bearish:
+        sl = last["close"] + last["atr"]
+        tp = last["close"] - (last["atr"] * 2)
         return "SELL", last["close"], sl, tp, last["rsi"]
 
     return None
 
 def run_bot():
-    bot.send_message(chat_id=CHAT_ID, text="✅ Gold Bot PRO (Filtered Strategy) Started")
+    send_telegram("✅ Gold Bot PRO ULTRA Started")
 
     while True:
         try:
             result = analyze()
             if result:
                 signal, price, sl, tp, rsi = result
-
                 msg = f"""
 📊 XAU/USD (M15)
 
-Signal: {signal}
-Price: {round(price,2)}
-RSI: {round(rsi,2)}
+🔥 Signal: {signal}
+💰 Price: {round(price,2)}
+📈 RSI: {round(rsi,2)}
 
 🎯 TP: {round(tp,2)}
 🛑 SL: {round(sl,2)}
 """
-                bot.send_message(chat_id=CHAT_ID, text=msg)
+                send_telegram(msg)
                 time.sleep(900)
 
             time.sleep(60)
 
         except Exception as e:
-            bot.send_message(chat_id=CHAT_ID, text=f"⚠ Error: {e}")
+            send_telegram(f"⚠ Error: {e}")
             time.sleep(120)
 
 @app.route("/")
