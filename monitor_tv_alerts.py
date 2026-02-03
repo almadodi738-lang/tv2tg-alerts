@@ -4,14 +4,10 @@ import requests
 from telegram import Bot
 from flask import Flask
 from threading import Thread
-from datetime import datetime
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 CHAT_ID = os.getenv("CHAT_ID")
 API_KEY = os.getenv("API_KEY")
-
-SYMBOL = "XAUUSD"
-INTERVAL = "15min"
 
 bot = Bot(token=BOT_TOKEN)
 app = Flask(__name__)
