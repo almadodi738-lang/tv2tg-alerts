@@ -9,7 +9,7 @@ BOT_TOKEN = os.getenv("BOT_TOKEN")
 CHAT_ID = os.getenv("CHAT_ID")
 DATA_API_KEY = os.getenv("DATA_API_KEY")
 
-SYMBOL = "XAU/USD"
+SYMBOLS = ["XAU/USD", "BTC/USD"]
 INTERVAL = "15min"
 
 app = Flask(__name__)
@@ -19,10 +19,10 @@ def send_telegram(message):
     payload = {"chat_id": CHAT_ID, "text": message}
     requests.post(url, data=payload)
 
-def get_data():
+def get_data(symbol):
     url = "https://api.twelvedata.com/time_series"
     params = {
-        "symbol": SYMBOL,
+        "symbol": symbol,
         "interval": INTERVAL,
         "apikey": DATA_API_KEY,
         "outputsize": 200
@@ -53,7 +53,6 @@ def indicators(df):
 
     df["tr"] = df["high"] - df["low"]
     df["atr"] = df["tr"].rolling(14).mean()
-
     return df
 
 def support_resistance(df):
@@ -61,8 +60,8 @@ def support_resistance(df):
     resistance = df["high"].tail(40).max()
     return support, resistance
 
-def analyze():
-    df = get_data()
+def analyze_symbol(symbol):
+    df = get_data(symbol)
     df = indicators(df)
     support, resistance = support_resistance(df)
 
@@ -82,39 +81,39 @@ def analyze():
     if trend_up and near_support and last["rsi"] < 40 and bullish:
         sl = last["close"] - last["atr"]
         tp = last["close"] + (last["atr"] * 2)
-        return "BUY (Support)", last["close"], sl, tp, last["rsi"]
+        return symbol, "BUY (Support)", last["close"], sl, tp, last["rsi"]
 
     # SELL from resistance
     if trend_down and near_resistance and last["rsi"] > 60 and bearish:
         sl = last["close"] + last["atr"]
         tp = last["close"] - (last["atr"] * 2)
-        return "SELL (Resistance)", last["close"], sl, tp, last["rsi"]
+        return symbol, "SELL (Resistance)", last["close"], sl, tp, last["rsi"]
 
     # Breakout BUY
     if trend_up and last["close"] > resistance and last["rsi"] > 55:
         sl = last["close"] - last["atr"]
         tp = last["close"] + (last["atr"] * 2)
-        return "BUY (Breakout)", last["close"], sl, tp, last["rsi"]
+        return symbol, "BUY (Breakout)", last["close"], sl, tp, last["rsi"]
 
     # Breakout SELL
     if trend_down and last["close"] < support and last["rsi"] < 45:
         sl = last["close"] + last["atr"]
         tp = last["close"] - (last["atr"] * 2)
-        return "SELL (Breakout)", last["close"], sl, tp, last["rsi"]
+        return symbol, "SELL (Breakout)", last["close"], sl, tp, last["rsi"]
 
     return None
 
 def run_bot():
-    send_telegram("✅ Gold Bot PRO (Full Analysis Mode) Started")
+    send_telegram("✅ Bot Started (Gold + Bitcoin)")
 
     while True:
         try:
-            result = analyze()
-            if result:
-                signal, price, sl, tp, rsi = result
-
-                msg = f"""
-📊 XAU/USD (M15)
+            for symbol in SYMBOLS:
+                result = analyze_symbol(symbol)
+                if result:
+                    sym, signal, price, sl, tp, rsi = result
+                    msg = f"""
+📊 {sym} (M15)
 
 🔥 Signal: {signal}
 💰 Price: {round(price,2)}
@@ -123,8 +122,8 @@ def run_bot():
 🎯 TP: {round(tp,2)}
 🛑 SL: {round(sl,2)}
 """
-                send_telegram(msg)
-                time.sleep(900)
+                    send_telegram(msg)
+                    time.sleep(10)
 
             time.sleep(60)
 
