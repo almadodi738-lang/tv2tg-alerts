@@ -29,13 +29,11 @@ def get_data():
     }
 
     r = requests.get(url, params=params).json()
-
     if "values" not in r:
         raise Exception(r)
 
     df = pd.DataFrame(r["values"])
-
-    for col in ["open", "high", "low", "close"]:
+    for col in ["open","high","low","close"]:
         df[col] = df[col].astype(float)
 
     df = df[::-1]
@@ -59,8 +57,8 @@ def indicators(df):
     return df
 
 def support_resistance(df):
-    support = df["low"].tail(50).min()
-    resistance = df["high"].tail(50).max()
+    support = df["low"].tail(40).min()
+    resistance = df["high"].tail(40).max()
     return support, resistance
 
 def analyze():
@@ -77,23 +75,37 @@ def analyze():
     bullish = last["close"] > last["open"]
     bearish = last["close"] < last["open"]
 
-    breakout_buy = last["close"] > resistance and prev["close"] <= resistance
-    breakout_sell = last["close"] < support and prev["close"] >= support
+    near_support = last["close"] <= support * 1.005
+    near_resistance = last["close"] >= resistance * 0.995
 
-    if trend_up and breakout_buy and last["rsi"] > 55 and bullish:
+    # BUY from support
+    if trend_up and near_support and last["rsi"] < 40 and bullish:
         sl = last["close"] - last["atr"]
         tp = last["close"] + (last["atr"] * 2)
-        return "BUY", last["close"], sl, tp, last["rsi"]
+        return "BUY (Support)", last["close"], sl, tp, last["rsi"]
 
-    if trend_down and breakout_sell and last["rsi"] < 45 and bearish:
+    # SELL from resistance
+    if trend_down and near_resistance and last["rsi"] > 60 and bearish:
         sl = last["close"] + last["atr"]
         tp = last["close"] - (last["atr"] * 2)
-        return "SELL", last["close"], sl, tp, last["rsi"]
+        return "SELL (Resistance)", last["close"], sl, tp, last["rsi"]
+
+    # Breakout BUY
+    if trend_up and last["close"] > resistance and last["rsi"] > 55:
+        sl = last["close"] - last["atr"]
+        tp = last["close"] + (last["atr"] * 2)
+        return "BUY (Breakout)", last["close"], sl, tp, last["rsi"]
+
+    # Breakout SELL
+    if trend_down and last["close"] < support and last["rsi"] < 45:
+        sl = last["close"] + last["atr"]
+        tp = last["close"] - (last["atr"] * 2)
+        return "SELL (Breakout)", last["close"], sl, tp, last["rsi"]
 
     return None
 
 def run_bot():
-    send_telegram("✅ Gold Bot PRO ULTRA Started")
+    send_telegram("✅ Gold Bot PRO (Full Analysis Mode) Started")
 
     while True:
         try:
