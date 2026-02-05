@@ -4,137 +4,138 @@ import requests
 import pandas as pd
 from flask import Flask
 from threading import Thread
+from datetime import datetime
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 CHAT_ID = os.getenv("CHAT_ID")
-DATA_API_KEY = os.getenv("DATA_API_KEY")
+API_KEY = os.getenv("DATA_API_KEY")
 
-SYMBOLS = ["XAU/USD", "BTC/USD"]
+SYMBOLS = ["XAU/USD","BTC/USD","ETH/USD"]
 INTERVAL = "15min"
+HTF = "1h"
 
 app = Flask(__name__)
 
-def send_telegram(message):
-    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-    payload = {"chat_id": CHAT_ID, "text": message}
-    requests.post(url, data=payload)
+last_signals = {}
 
-def get_data(symbol):
-    url = "https://api.twelvedata.com/time_series"
-    params = {
-        "symbol": symbol,
-        "interval": INTERVAL,
-        "apikey": DATA_API_KEY,
-        "outputsize": 200
-    }
+# Telegram
+def send(msg):
+    url=f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+    requests.post(url,data={"chat_id":CHAT_ID,"text":msg})
 
-    r = requests.get(url, params=params).json()
+# Session Filter
+def liquid_session():
+    h=datetime.utcnow().hour
+    return (7<=h<=16) or (12<=h<=21)
+
+# Fetch Data
+def candles(symbol,interval):
+    url="https://api.twelvedata.com/time_series"
+    r=requests.get(url,params={
+        "symbol":symbol,
+        "interval":interval,
+        "apikey":API_KEY,
+        "outputsize":200
+    }).json()
+
     if "values" not in r:
         raise Exception(r)
 
-    df = pd.DataFrame(r["values"])
-    for col in ["open","high","low","close"]:
-        df[col] = df[col].astype(float)
+    df=pd.DataFrame(r["values"])
+    for c in ["open","high","low","close"]:
+        df[c]=df[c].astype(float)
+    return df[::-1]
 
-    df = df[::-1]
+# Indicators
+def enrich(df):
+    df["ema50"]=df["close"].ewm(span=50).mean()
+    df["ema200"]=df["close"].ewm(span=200).mean()
+
+    delta=df["close"].diff()
+    gain=delta.where(delta>0,0)
+    loss=-delta.where(delta<0,0)
+    rs=gain.rolling(14).mean()/loss.rolling(14).mean()
+    df["rsi"]=100-(100/(1+rs))
+
+    df["body"]=abs(df["close"]-df["open"])
+    df["body_avg"]=df["body"].rolling(5).mean()
+
     return df
 
-def indicators(df):
-    df["ema50"] = df["close"].ewm(span=50).mean()
-    df["ema200"] = df["close"].ewm(span=200).mean()
+# Strategy
+def signal(symbol):
+    if not liquid_session():
+        return None
 
-    delta = df["close"].diff()
-    gain = delta.where(delta > 0, 0)
-    loss = -delta.where(delta < 0, 0)
-    avg_gain = gain.rolling(14).mean()
-    avg_loss = loss.rolling(14).mean()
-    rs = avg_gain / avg_loss
-    df["rsi"] = 100 - (100 / (1 + rs))
+    df=enrich(candles(symbol,INTERVAL))
+    htf=enrich(candles(symbol,HTF))
 
-    df["tr"] = df["high"] - df["low"]
-    df["atr"] = df["tr"].rolling(14).mean()
-    return df
+    L=df.iloc[-1]
+    H=htf.iloc[-1]
 
-def support_resistance(df):
-    support = df["low"].tail(40).min()
-    resistance = df["high"].tail(40).max()
-    return support, resistance
+    trend_up=L["ema50"]>L["ema200"] and H["ema50"]>H["ema200"]
+    trend_dn=L["ema50"]<L["ema200"] and H["ema50"]<H["ema200"]
 
-def analyze_symbol(symbol):
-    df = get_data(symbol)
-    df = indicators(df)
-    support, resistance = support_resistance(df)
+    strong=L["body"]>L["body_avg"]
 
-    last = df.iloc[-1]
-    prev = df.iloc[-2]
+    # BUY
+    if trend_up and 35<L["rsi"]<50 and L["close"]>L["open"] and strong:
+        sl=df["low"].tail(4).min()
+        risk=L["close"]-sl
+        tp1=L["close"]+risk
+        tp2=L["close"]+risk*2
+        tp3=L["close"]+risk*3
+        return ("BUY",L["close"],sl,tp1,tp2,tp3)
 
-    trend_up = last["ema50"] > last["ema200"]
-    trend_down = last["ema50"] < last["ema200"]
-
-    bullish = last["close"] > last["open"]
-    bearish = last["close"] < last["open"]
-
-    near_support = last["close"] <= support * 1.005
-    near_resistance = last["close"] >= resistance * 0.995
-
-    # BUY from support
-    if trend_up and near_support and last["rsi"] < 40 and bullish:
-        sl = last["close"] - last["atr"]
-        tp = last["close"] + (last["atr"] * 2)
-        return symbol, "BUY (Support)", last["close"], sl, tp, last["rsi"]
-
-    # SELL from resistance
-    if trend_down and near_resistance and last["rsi"] > 60 and bearish:
-        sl = last["close"] + last["atr"]
-        tp = last["close"] - (last["atr"] * 2)
-        return symbol, "SELL (Resistance)", last["close"], sl, tp, last["rsi"]
-
-    # Breakout BUY
-    if trend_up and last["close"] > resistance and last["rsi"] > 55:
-        sl = last["close"] - last["atr"]
-        tp = last["close"] + (last["atr"] * 2)
-        return symbol, "BUY (Breakout)", last["close"], sl, tp, last["rsi"]
-
-    # Breakout SELL
-    if trend_down and last["close"] < support and last["rsi"] < 45:
-        sl = last["close"] + last["atr"]
-        tp = last["close"] - (last["atr"] * 2)
-        return symbol, "SELL (Breakout)", last["close"], sl, tp, last["rsi"]
+    # SELL
+    if trend_dn and 50<L["rsi"]<65 and L["close"]<L["open"] and strong:
+        sl=df["high"].tail(4).max()
+        risk=sl-L["close"]
+        tp1=L["close"]-risk
+        tp2=L["close"]-risk*2
+        tp3=L["close"]-risk*3
+        return ("SELL",L["close"],sl,tp1,tp2,tp3)
 
     return None
 
-def run_bot():
-    send_telegram("✅ Bot Started (Gold + Bitcoin)")
+# Bot Loop
+def run():
+    send("🚀 Institutional Grade Bot Started")
 
     while True:
         try:
-            for symbol in SYMBOLS:
-                result = analyze_symbol(symbol)
-                if result:
-                    sym, signal, price, sl, tp, rsi = result
-                    msg = f"""
-📊 {sym} (M15)
+            for s in SYMBOLS:
+                sig=signal(s)
+                if sig:
+                    if last_signals.get(s)==sig[0]:
+                        continue
 
-🔥 Signal: {signal}
-💰 Price: {round(price,2)}
-📈 RSI: {round(rsi,2)}
+                    last_signals[s]=sig[0]
 
-🎯 TP: {round(tp,2)}
-🛑 SL: {round(sl,2)}
+                    side,e,sl,t1,t2,t3=sig
+                    msg=f"""
+📊 {s}
+🔥 {side}
+
+Entry {round(e,2)}
+TP1 {round(t1,2)}
+TP2 {round(t2,2)}
+TP3 {round(t3,2)}
+SL {round(sl,2)}
 """
-                    send_telegram(msg)
-                    time.sleep(10)
+                    send(msg)
+                    time.sleep(4)
 
-            time.sleep(60)
+            time.sleep(900)
 
-        except Exception as e:
-            send_telegram(f"⚠ Error: {e}")
+        except Exception as ex:
+            send(f"⚠ {ex}")
             time.sleep(120)
 
 @app.route("/")
 def home():
-    return "Bot is running"
+    return "Running"
 
-if __name__ == "__main__":
-    Thread(target=run_bot).start()
-    app.run(host="0.0.0.0", port=10000)
+if __name__=="__main__":
+    Thread(target=run).start()
+    app.run(host="0.0.0.0",port=10000)
