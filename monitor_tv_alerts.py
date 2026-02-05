@@ -8,43 +8,46 @@ from datetime import datetime
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 CHAT_ID = os.getenv("CHAT_ID")
-API_KEY = os.getenv("DATA_API_KEY")
+TD_KEY = os.getenv("DATA_API_KEY")
+FH_KEY = os.getenv("FINNHUB_KEY")
 
-SYMBOLS = ["XAU/USD","BTC/USD","ETH/USD"]
-INTERVAL = "15min"
-HTF = "1h"
+SYMBOLS = ["XAU/USD","BINANCE:BTCUSDT","BINANCE:ETHUSDT"]
 
 app = Flask(__name__)
-
-last_signals = {}
+last_signal={}
 
 # Telegram
 def send(msg):
     url=f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
     requests.post(url,data={"chat_id":CHAT_ID,"text":msg})
 
-# Session Filter
-def liquid_session():
+# Session filter
+def liquid():
     h=datetime.utcnow().hour
     return (7<=h<=16) or (12<=h<=21)
 
-# Fetch Data
-def candles(symbol,interval):
+# ===== GOLD (TwelveData) =====
+def gold_candles(interval):
     url="https://api.twelvedata.com/time_series"
     r=requests.get(url,params={
-        "symbol":symbol,
+        "symbol":"XAU/USD",
         "interval":interval,
-        "apikey":API_KEY,
+        "apikey":TD_KEY,
         "outputsize":200
     }).json()
-
     if "values" not in r:
         raise Exception(r)
-
     df=pd.DataFrame(r["values"])
     for c in ["open","high","low","close"]:
         df[c]=df[c].astype(float)
     return df[::-1]
+
+# ===== CRYPTO (Finnhub) =====
+def crypto_price(symbol):
+    sym=symbol.replace("BINANCE:","")
+    url=f"https://finnhub.io/api/v1/quote?symbol=BINANCE:{sym}&token={FH_KEY}"
+    r=requests.get(url).json()
+    return float(r["c"])
 
 # Indicators
 def enrich(df):
@@ -58,73 +61,85 @@ def enrich(df):
     df["rsi"]=100-(100/(1+rs))
 
     df["body"]=abs(df["close"]-df["open"])
-    df["body_avg"]=df["body"].rolling(5).mean()
-
+    df["avg"]=df["body"].rolling(5).mean()
     return df
 
-# Strategy
-def signal(symbol):
-    if not liquid_session():
+# Strategy GOLD
+def analyze_gold():
+    if not liquid():
         return None
 
-    df=enrich(candles(symbol,INTERVAL))
-    htf=enrich(candles(symbol,HTF))
+    df=enrich(gold_candles("15min"))
+    htf=enrich(gold_candles("1h"))
 
     L=df.iloc[-1]
     H=htf.iloc[-1]
 
-    trend_up=L["ema50"]>L["ema200"] and H["ema50"]>H["ema200"]
-    trend_dn=L["ema50"]<L["ema200"] and H["ema50"]<H["ema200"]
+    up=L["ema50"]>L["ema200"] and H["ema50"]>H["ema200"]
+    dn=L["ema50"]<L["ema200"] and H["ema50"]<H["ema200"]
+    strong=L["body"]>L["avg"]
 
-    strong=L["body"]>L["body_avg"]
-
-    # BUY
-    if trend_up and 35<L["rsi"]<50 and L["close"]>L["open"] and strong:
+    if up and 35<L["rsi"]<50 and L["close"]>L["open"] and strong:
         sl=df["low"].tail(4).min()
-        risk=L["close"]-sl
-        tp1=L["close"]+risk
-        tp2=L["close"]+risk*2
-        tp3=L["close"]+risk*3
-        return ("BUY",L["close"],sl,tp1,tp2,tp3)
+        r=L["close"]-sl
+        return ("XAU/USD","BUY",L["close"],sl,L["close"]+r,L["close"]+2*r,L["close"]+3*r)
 
-    # SELL
-    if trend_dn and 50<L["rsi"]<65 and L["close"]<L["open"] and strong:
+    if dn and 50<L["rsi"]<65 and L["close"]<L["open"] and strong:
         sl=df["high"].tail(4).max()
-        risk=sl-L["close"]
-        tp1=L["close"]-risk
-        tp2=L["close"]-risk*2
-        tp3=L["close"]-risk*3
-        return ("SELL",L["close"],sl,tp1,tp2,tp3)
+        r=sl-L["close"]
+        return ("XAU/USD","SELL",L["close"],sl,L["close"]-r,L["close"]-2*r,L["close"]-3*r)
 
     return None
 
-# Bot Loop
+# Strategy CRYPTO (Lightweight)
+def analyze_crypto(sym):
+    price=crypto_price(sym)
+
+    # فلترة بسيطة اتجاه
+    if price is None:
+        return None
+
+    # pseudo TP/SL
+    sl=price*0.992
+    tp1=price*1.005
+    tp2=price*1.01
+    tp3=price*1.02
+
+    return (sym,"SCAN",price,sl,tp1,tp2,tp3)
+
+# Loop
 def run():
-    send("🚀 Institutional Grade Bot Started")
+    send("🚀 Hybrid PRO Bot Started")
 
     while True:
         try:
-            for s in SYMBOLS:
-                sig=signal(s)
-                if sig:
-                    if last_signals.get(s)==sig[0]:
-                        continue
-
-                    last_signals[s]=sig[0]
-
-                    side,e,sl,t1,t2,t3=sig
-                    msg=f"""
+            g=analyze_gold()
+            if g:
+                s,e,entry,sl,t1,t2,t3=g
+                if last_signal.get(s)!=e:
+                    last_signal[s]=e
+                    send(f"""
 📊 {s}
-🔥 {side}
+🔥 {e}
 
-Entry {round(e,2)}
+Entry {round(entry,2)}
 TP1 {round(t1,2)}
 TP2 {round(t2,2)}
 TP3 {round(t3,2)}
 SL {round(sl,2)}
-"""
-                    send(msg)
-                    time.sleep(4)
+""")
+
+            for c in SYMBOLS[1:]:
+                res=analyze_crypto(c)
+                if res:
+                    s,e,entry,sl,t1,t2,t3=res
+                    send(f"""
+🪙 {s}
+Price {round(entry,2)}
+TP1 {round(t1,2)}
+TP2 {round(t2,2)}
+TP3 {round(t3,2)}
+""")
 
             time.sleep(900)
 
