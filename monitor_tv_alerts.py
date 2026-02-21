@@ -39,8 +39,8 @@ def webhook():
 💰 Price: {price}
 """
 
-    # لا نعرض الأهداف والستوب إذا كانت EXIT
-    if signal != "EXIT":
+    # عرض الأهداف فقط إذا ليست EXIT
+    if signal and signal.upper() != "EXIT":
         msg += f"""
 
 🎯 TP1: {tp1}
@@ -52,7 +52,7 @@ def webhook():
 
     send_telegram(msg)
 
-    return jsonify({"status":"ok"})
+    return jsonify({"status": "ok"})
 
 
 if __name__ == "__main__":
