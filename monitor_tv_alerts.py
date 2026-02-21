@@ -31,11 +31,17 @@ def webhook():
     tp2 = data.get("tp2")
     tp3 = data.get("tp3")
 
+    # ===== بناء الرسالة =====
     msg = f"""
 📊 {symbol}
 
 🔥 Signal: {signal}
 💰 Price: {price}
+"""
+
+    # لا نعرض الأهداف والستوب إذا كانت EXIT
+    if signal != "EXIT":
+        msg += f"""
 
 🎯 TP1: {tp1}
 🎯 TP2: {tp2}
