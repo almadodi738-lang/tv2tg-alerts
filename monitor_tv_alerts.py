@@ -8,21 +8,23 @@ CHAT_ID = os.getenv("CHAT_ID")
 app = Flask(__name__)
 
 
-# ===== ارسال رسالة تلغرام =====
 def send_telegram(msg):
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
     requests.post(url, data={"chat_id": CHAT_ID, "text": msg})
 
 
-# ===== تنسيق السعر حسب الرمز =====
+# ===== تنسيق الأسعار =====
 def format_price(value, symbol):
+
     try:
         value = float(value)
 
-        if "XAG" in symbol:   # SILVER
+        # SILVER
+        if "XAG" in symbol:
             return f"{value:.2f}"
 
-        if "BTC" in symbol or "XAU" in symbol:   # BTC + GOLD
+        # GOLD + BTC
+        if "XAU" in symbol or "BTC" in symbol:
             return str(round(value))
 
         return str(value)
@@ -33,7 +35,9 @@ def format_price(value, symbol):
 
 # ===== حساب RR =====
 def calc_rr(entry, sl, tp1):
+
     try:
+
         entry = float(entry)
         sl = float(sl)
         tp1 = float(tp1)
@@ -41,8 +45,7 @@ def calc_rr(entry, sl, tp1):
         risk = abs(entry - sl)
         reward = abs(tp1 - entry)
 
-        rr = reward / risk
-        return round(rr,2)
+        return round(reward / risk,2)
 
     except:
         return None
@@ -71,39 +74,49 @@ def webhook():
 
     symbol = data.get("symbol")
     signal = data.get("signal") or data.get("side")
-    price_raw  = data.get("price") or data.get("entry")
+
+    # ===== منع رسائل None =====
+    if not signal:
+        return jsonify({"status":"ignored"})
+
+
+    entry_raw = data.get("price") or data.get("entry")
 
     sl_raw  = data.get("sl")
     tp1_raw = data.get("tp1")
     tp2_raw = data.get("tp2")
     tp3_raw = data.get("tp3")
 
+
     # ===== تنسيق الأرقام =====
-    price = format_price(price_raw, symbol)
+    entry = format_price(entry_raw, symbol)
+
     sl  = format_price(sl_raw, symbol)
     tp1 = format_price(tp1_raw, symbol)
     tp2 = format_price(tp2_raw, symbol)
     tp3 = format_price(tp3_raw, symbol)
 
-    # ===== حساب RR =====
-    rr = calc_rr(price_raw, sl_raw, tp1_raw)
 
-    # ===== حساب المسافة =====
+    rr = calc_rr(entry_raw, sl_raw, tp1_raw)
+
+
     try:
-        distance = abs(float(tp1_raw) - float(price_raw))
+        distance = abs(float(tp1_raw) - float(entry_raw))
         distance = round(distance,2)
     except:
         distance = None
 
-    # ===== بناء الرسالة =====
+
     msg = f"""
 📊 {symbol}
 
 🔥 Signal: {signal}
-💰 Entry: {price}
+💰 Entry: {entry}
 """
 
-    if signal and signal.upper() != "EXIT":
+
+    if signal.upper() != "EXIT":
+
         msg += f"""
 
 🎯 Targets
@@ -120,9 +133,10 @@ TP3: {tp3}
         if distance:
             msg += f"\n💎 TP1 Distance: {distance}"
 
+
     send_telegram(msg)
 
-    return jsonify({"status": "ok"})
+    return jsonify({"status":"ok"})
 
 
 if __name__ == "__main__":
