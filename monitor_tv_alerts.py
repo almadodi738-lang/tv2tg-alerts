@@ -18,10 +18,20 @@ def home():
 @app.route("/webhook", methods=["POST"])
 def webhook():
 
-    data = request.json
+    # قراءة أي نوع بيانات من TradingView
+    data = request.get_json(silent=True)
+
+    if data is None:
+        data = request.form.to_dict()
+
+    if not data:
+        try:
+            data = eval(request.data.decode())
+        except:
+            data = {}
+
     print("Incoming:", data)
 
-    # دعم كل الصيغ
     symbol = data.get("symbol")
     signal = data.get("signal") or data.get("side")
     price  = data.get("price")  or data.get("entry")
@@ -31,7 +41,6 @@ def webhook():
     tp2 = data.get("tp2")
     tp3 = data.get("tp3")
 
-    # ===== بناء الرسالة =====
     msg = f"""
 📊 {symbol}
 
@@ -39,7 +48,6 @@ def webhook():
 💰 Price: {price}
 """
 
-    # عرض الأهداف فقط إذا ليست EXIT
     if signal and signal.upper() != "EXIT":
         msg += f"""
 
@@ -53,7 +61,6 @@ def webhook():
     send_telegram(msg)
 
     return jsonify({"status": "ok"})
-
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=10000)
