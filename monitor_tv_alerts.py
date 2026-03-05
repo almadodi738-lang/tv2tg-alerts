@@ -7,8 +7,6 @@ CHAT_ID = os.getenv("CHAT_ID")
 
 app = Flask(name)
 
-================= TELEGRAM =================
-
 def send_telegram(msg):
 
 url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
@@ -20,7 +18,6 @@ requests.post(
         "text": msg
     }
 )
-================= PRICE FORMAT =================
 
 def format_price(value, symbol):
 
@@ -34,20 +31,16 @@ except:
 
 symbol = str(symbol).upper()
 
-# SILVER → رقمين عشريين
 if "XAG" in symbol or "SILVER" in symbol:
     return f"{value:.2f}"
 
-# GOLD → بدون كسور
 if "XAU" in symbol or "GOLD" in symbol:
     return str(round(value))
 
-# BTC → بدون كسور
 if "BTC" in symbol:
     return str(round(value))
 
 return str(value)
-================= RR =================
 
 def calc_rr(entry, sl, tp1):
 
