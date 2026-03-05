@@ -11,7 +11,16 @@ app = Flask(**name**)
 
 def send_telegram(msg):
 url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-requests.post(url, data={"chat_id": CHAT_ID, "text": msg})
+
+```
+requests.post(
+    url,
+    data={
+        "chat_id": CHAT_ID,
+        "text": msg
+    }
+)
+```
 
 # ================= PRICE FORMAT =================
 
@@ -46,9 +55,9 @@ return str(value)
 # ================= RR CALC =================
 
 def calc_rr(entry, sl, tp1):
-try:
 
 ```
+try:
     entry = float(entry)
     sl = float(sl)
     tp1 = float(tp1)
@@ -60,15 +69,20 @@ try:
         return None
 
     rr = reward / risk
+
     return round(rr, 2)
 
 except:
     return None
 ```
 
+# ================= HOME =================
+
 @app.route("/")
 def home():
 return "Webhook Bot Running"
+
+# ================= WEBHOOK =================
 
 @app.route("/webhook", methods=["POST"])
 def webhook():
@@ -102,7 +116,7 @@ tp2_raw = data.get("tp2")
 tp3_raw = data.get("tp3")
 
 
-# ===== FORMAT PRICES =====
+# ================= FORMAT =================
 entry = format_price(entry_raw, symbol)
 sl = format_price(sl_raw, symbol)
 tp1 = format_price(tp1_raw, symbol)
@@ -110,12 +124,13 @@ tp2 = format_price(tp2_raw, symbol)
 tp3 = format_price(tp3_raw, symbol)
 
 
-# ===== RR =====
+# ================= RR =================
 rr = calc_rr(entry_raw, sl_raw, tp1_raw)
 
 
-# ===== DISTANCE =====
+# ================= DISTANCE =================
 distance = None
+
 try:
     if entry_raw and tp1_raw:
         distance_val = abs(float(tp1_raw) - float(entry_raw))
@@ -124,7 +139,7 @@ except:
     distance = None
 
 
-# ===== MESSAGE =====
+# ================= MESSAGE =================
 msg = f"""
 ```
 
@@ -160,6 +175,8 @@ send_telegram(msg)
 
 return jsonify({"status": "ok"})
 ```
+
+# ================= RUN =================
 
 if **name** == "**main**":
 app.run(host="0.0.0.0", port=10000)
