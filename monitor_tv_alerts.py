@@ -5,121 +5,140 @@ from flask import Flask, request, jsonify
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 CHAT_ID = os.getenv("CHAT_ID")
 
-app = Flask(__name__)
-
+app = Flask(**name**)
 
 # ================= TELEGRAM =================
-def send_telegram(msg):
-    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-    requests.post(url, data={"chat_id": CHAT_ID, "text": msg})
 
+def send_telegram(msg):
+url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+requests.post(url, data={"chat_id": CHAT_ID, "text": msg})
 
 # ================= PRICE FORMAT =================
+
 def format_price(value, symbol):
-    try:
-        value = float(value)
 
-        # SILVER
-        if "XAG" in symbol:
-            return f"{value:.2f}"
+```
+if value is None:
+    return None
 
-        # GOLD + BTC
-        if "BTC" in symbol or "XAU" in symbol:
-            return str(round(value))
+try:
+    value = float(value)
+except:
+    return value
 
-        return str(value)
+symbol = str(symbol).upper()
 
-    except:
-        return value
+# SILVER
+if "XAG" in symbol or "SILVER" in symbol:
+    return f"{value:.2f}"
 
+# GOLD
+if "XAU" in symbol or "GOLD" in symbol:
+    return str(round(value))
+
+# BTC
+if "BTC" in symbol:
+    return str(round(value))
+
+return str(value)
+```
 
 # ================= RR CALC =================
+
 def calc_rr(entry, sl, tp1):
-    try:
+try:
 
-        entry = float(entry)
-        sl = float(sl)
-        tp1 = float(tp1)
+```
+    entry = float(entry)
+    sl = float(sl)
+    tp1 = float(tp1)
 
-        risk = abs(entry - sl)
-        reward = abs(tp1 - entry)
+    risk = abs(entry - sl)
+    reward = abs(tp1 - entry)
 
-        rr = reward / risk
-        return round(rr, 2)
-
-    except:
+    if risk == 0:
         return None
 
+    rr = reward / risk
+    return round(rr, 2)
+
+except:
+    return None
+```
 
 @app.route("/")
 def home():
-    return "Webhook Bot Running"
-
+return "Webhook Bot Running"
 
 @app.route("/webhook", methods=["POST"])
 def webhook():
 
-    data = request.get_json(silent=True)
+```
+data = request.get_json(silent=True)
 
-    if data is None:
-        data = request.form.to_dict()
+if data is None:
+    data = request.form.to_dict()
 
-    if not data:
-        try:
-            data = eval(request.data.decode())
-        except:
-            data = {}
-
-    print("Incoming:", data)
-
-    symbol = data.get("symbol")
-    signal = data.get("signal") or data.get("side")
-
-    # منع رسائل None
-    if not signal:
-        return jsonify({"status": "ignored"})
-
-
-    entry_raw = data.get("price") or data.get("entry")
-
-    sl_raw = data.get("sl")
-    tp1_raw = data.get("tp1")
-    tp2_raw = data.get("tp2")
-    tp3_raw = data.get("tp3")
-
-
-    # ===== FORMAT PRICES =====
-    entry = format_price(entry_raw, symbol)
-    sl = format_price(sl_raw, symbol)
-    tp1 = format_price(tp1_raw, symbol)
-    tp2 = format_price(tp2_raw, symbol)
-    tp3 = format_price(tp3_raw, symbol)
-
-
-    # ===== RR =====
-    rr = calc_rr(entry_raw, sl_raw, tp1_raw)
-
-
-    # ===== DISTANCE =====
+if not data:
     try:
-        distance = abs(float(tp1_raw) - float(entry_raw))
-        distance = format_price(distance, symbol)
+        data = eval(request.data.decode())
     except:
-        distance = None
+        data = {}
+
+print("Incoming:", data)
+
+symbol = data.get("symbol")
+signal = data.get("signal") or data.get("side")
+
+# منع الرسائل الفارغة
+if not symbol or not signal:
+    return jsonify({"status": "ignored"})
 
 
-    # ===== MESSAGE =====
-    msg = f"""
+entry_raw = data.get("price") or data.get("entry")
+sl_raw = data.get("sl")
+tp1_raw = data.get("tp1")
+tp2_raw = data.get("tp2")
+tp3_raw = data.get("tp3")
+
+
+# ===== FORMAT PRICES =====
+entry = format_price(entry_raw, symbol)
+sl = format_price(sl_raw, symbol)
+tp1 = format_price(tp1_raw, symbol)
+tp2 = format_price(tp2_raw, symbol)
+tp3 = format_price(tp3_raw, symbol)
+
+
+# ===== RR =====
+rr = calc_rr(entry_raw, sl_raw, tp1_raw)
+
+
+# ===== DISTANCE =====
+distance = None
+try:
+    if entry_raw and tp1_raw:
+        distance_val = abs(float(tp1_raw) - float(entry_raw))
+        distance = format_price(distance_val, symbol)
+except:
+    distance = None
+
+
+# ===== MESSAGE =====
+msg = f"""
+```
+
 📊 {symbol}
 
 🔥 Signal: {signal}
 💰 Entry: {entry}
 """
 
+```
+if signal.upper() != "EXIT":
 
-    if signal.upper() != "EXIT":
-
-        msg += f"""
+    msg += f"""
+```
 
 🎯 Targets
 TP1: {tp1}
@@ -129,17 +148,18 @@ TP3: {tp3}
 🛑 Stop Loss: {sl}
 """
 
-        if rr:
-            msg += f"\n📈 RR: 1 : {rr}"
+```
+    if rr is not None:
+        msg += f"\n📈 RR: 1 : {rr}"
 
-        if distance:
-            msg += f"\n💎 TP1 Distance: {distance}"
-
-
-    send_telegram(msg)
-
-    return jsonify({"status": "ok"})
+    if distance is not None:
+        msg += f"\n💎 TP1 Distance: {distance}"
 
 
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=10000)
+send_telegram(msg)
+
+return jsonify({"status": "ok"})
+```
+
+if **name** == "**main**":
+app.run(host="0.0.0.0", port=10000)
