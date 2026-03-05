@@ -10,9 +10,10 @@ app = Flask(**name**)
 # ================= TELEGRAM =================
 
 def send_telegram(msg):
-url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
 
 ```
+url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+
 requests.post(
     url,
     data={
@@ -37,22 +38,22 @@ except:
 
 symbol = str(symbol).upper()
 
-# SILVER
+# SILVER → رقمين عشريين
 if "XAG" in symbol or "SILVER" in symbol:
     return f"{value:.2f}"
 
-# GOLD
+# GOLD → بدون كسور
 if "XAU" in symbol or "GOLD" in symbol:
     return str(round(value))
 
-# BTC
+# BTC → بدون كسور
 if "BTC" in symbol:
     return str(round(value))
 
 return str(value)
 ```
 
-# ================= RR CALC =================
+# ================= RR =================
 
 def calc_rr(entry, sl, tp1):
 
@@ -75,13 +76,9 @@ except:
     return None
 ```
 
-# ================= HOME =================
-
 @app.route("/")
 def home():
 return "Webhook Bot Running"
-
-# ================= WEBHOOK =================
 
 @app.route("/webhook", methods=["POST"])
 def webhook():
@@ -103,17 +100,15 @@ print("Incoming:", data)
 symbol = data.get("symbol")
 signal = data.get("signal") or data.get("side")
 
-# تجاهل الرسائل الفارغة
+# منع رسائل None
 if not symbol or not signal:
     return jsonify({"status": "ignored"})
-
 
 entry_raw = data.get("price") or data.get("entry")
 sl_raw = data.get("sl")
 tp1_raw = data.get("tp1")
 tp2_raw = data.get("tp2")
 tp3_raw = data.get("tp3")
-
 
 # ===== FORMAT =====
 entry = format_price(entry_raw, symbol)
@@ -122,10 +117,8 @@ tp1 = format_price(tp1_raw, symbol)
 tp2 = format_price(tp2_raw, symbol)
 tp3 = format_price(tp3_raw, symbol)
 
-
 # ===== RR =====
 rr = calc_rr(entry_raw, sl_raw, tp1_raw)
-
 
 # ===== DISTANCE =====
 distance = None
@@ -136,7 +129,6 @@ try:
         distance = format_price(distance_val, symbol)
 except:
     distance = None
-
 
 # ===== MESSAGE =====
 msg = f"""
@@ -169,13 +161,10 @@ TP3: {tp3}
     if distance is not None:
         msg += f"\n💎 TP1 Distance: {distance}"
 
-
 send_telegram(msg)
 
 return jsonify({"status": "ok"})
 ```
-
-# ================= RUN =================
 
 if **name** == "**main**":
 app.run(host="0.0.0.0", port=10000)
