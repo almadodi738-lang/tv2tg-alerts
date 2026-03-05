@@ -38,11 +38,11 @@ symbol = str(symbol).upper()
 if "XAG" in symbol or "SILVER" in symbol:
     return f"{value:.2f}"
 
-# GOLD
+# GOLD → بدون كسور
 if "XAU" in symbol or "GOLD" in symbol:
     return str(round(value))
 
-# BTC
+# BTC → بدون كسور
 if "BTC" in symbol:
     return str(round(value))
 
