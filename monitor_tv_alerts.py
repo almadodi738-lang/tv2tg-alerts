@@ -5,13 +5,12 @@ from flask import Flask, request, jsonify
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 CHAT_ID = os.getenv("CHAT_ID")
 
-app = Flask(**name**)
+app = Flask(name)
 
-# ================= TELEGRAM =================
+================= TELEGRAM =================
 
 def send_telegram(msg):
 
-```
 url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
 
 requests.post(
@@ -21,13 +20,10 @@ requests.post(
         "text": msg
     }
 )
-```
-
-# ================= PRICE FORMAT =================
+================= PRICE FORMAT =================
 
 def format_price(value, symbol):
 
-```
 if value is None:
     return None
 
@@ -51,13 +47,10 @@ if "BTC" in symbol:
     return str(round(value))
 
 return str(value)
-```
-
-# ================= RR =================
+================= RR =================
 
 def calc_rr(entry, sl, tp1):
 
-```
 try:
     entry = float(entry)
     sl = float(sl)
@@ -74,7 +67,6 @@ try:
 
 except:
     return None
-```
 
 @app.route("/")
 def home():
@@ -83,7 +75,6 @@ return "Webhook Bot Running"
 @app.route("/webhook", methods=["POST"])
 def webhook():
 
-```
 data = request.get_json(silent=True)
 
 if data is None:
@@ -127,7 +118,6 @@ except:
     distance = None
 
 msg = f"""
-```
 
 📊 {symbol}
 
@@ -135,11 +125,9 @@ msg = f"""
 💰 Entry: {entry}
 """
 
-```
 if signal.upper() != "EXIT":
 
     msg += f"""
-```
 
 🎯 Targets
 TP1: {tp1}
@@ -149,7 +137,6 @@ TP3: {tp3}
 🛑 Stop Loss: {sl}
 """
 
-```
     if rr is not None:
         msg += f"\n📈 RR: 1 : {rr}"
 
@@ -159,7 +146,6 @@ TP3: {tp3}
 send_telegram(msg)
 
 return jsonify({"status": "ok"})
-```
 
-if **name** == "**main**":
+if name == "main":
 app.run(host="0.0.0.0", port=10000)
