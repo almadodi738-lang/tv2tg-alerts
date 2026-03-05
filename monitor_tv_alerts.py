@@ -69,7 +69,6 @@ try:
         return None
 
     rr = reward / risk
-
     return round(rr, 2)
 
 except:
@@ -104,7 +103,7 @@ print("Incoming:", data)
 symbol = data.get("symbol")
 signal = data.get("signal") or data.get("side")
 
-# منع الرسائل الفارغة
+# تجاهل الرسائل الفارغة
 if not symbol or not signal:
     return jsonify({"status": "ignored"})
 
@@ -116,7 +115,7 @@ tp2_raw = data.get("tp2")
 tp3_raw = data.get("tp3")
 
 
-# ================= FORMAT =================
+# ===== FORMAT =====
 entry = format_price(entry_raw, symbol)
 sl = format_price(sl_raw, symbol)
 tp1 = format_price(tp1_raw, symbol)
@@ -124,11 +123,11 @@ tp2 = format_price(tp2_raw, symbol)
 tp3 = format_price(tp3_raw, symbol)
 
 
-# ================= RR =================
+# ===== RR =====
 rr = calc_rr(entry_raw, sl_raw, tp1_raw)
 
 
-# ================= DISTANCE =================
+# ===== DISTANCE =====
 distance = None
 
 try:
@@ -139,7 +138,7 @@ except:
     distance = None
 
 
-# ================= MESSAGE =================
+# ===== MESSAGE =====
 msg = f"""
 ```
 
