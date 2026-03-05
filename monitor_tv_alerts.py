@@ -42,11 +42,11 @@ symbol = str(symbol).upper()
 if "XAG" in symbol or "SILVER" in symbol:
     return f"{value:.2f}"
 
-# GOLD → بدون كسور
+# GOLD
 if "XAU" in symbol or "GOLD" in symbol:
     return str(round(value))
 
-# BTC → بدون كسور
+# BTC
 if "BTC" in symbol:
     return str(round(value))
 
@@ -100,7 +100,6 @@ print("Incoming:", data)
 symbol = data.get("symbol")
 signal = data.get("signal") or data.get("side")
 
-# منع رسائل None
 if not symbol or not signal:
     return jsonify({"status": "ignored"})
 
@@ -110,17 +109,14 @@ tp1_raw = data.get("tp1")
 tp2_raw = data.get("tp2")
 tp3_raw = data.get("tp3")
 
-# ===== FORMAT =====
 entry = format_price(entry_raw, symbol)
 sl = format_price(sl_raw, symbol)
 tp1 = format_price(tp1_raw, symbol)
 tp2 = format_price(tp2_raw, symbol)
 tp3 = format_price(tp3_raw, symbol)
 
-# ===== RR =====
 rr = calc_rr(entry_raw, sl_raw, tp1_raw)
 
-# ===== DISTANCE =====
 distance = None
 
 try:
@@ -130,7 +126,6 @@ try:
 except:
     distance = None
 
-# ===== MESSAGE =====
 msg = f"""
 ```
 
