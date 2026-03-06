@@ -7,9 +7,16 @@ CHAT_ID = os.getenv("CHAT_ID")
 
 app = Flask(name)
 
+================= TELEGRAM =================
+
 def send_telegram(msg):
 url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-requests.post(url, data={"chat_id": CHAT_ID, "text": msg})
+requests.post(url, data={
+"chat_id": CHAT_ID,
+"text": msg
+})
+
+================= PRICE FORMAT =================
 
 def format_price(value, symbol):
 
@@ -27,15 +34,16 @@ symbol = str(symbol).upper()
 if "XAG" in symbol or "SILVER" in symbol:
     return f"{value:.2f}"
 
-# GOLD
+# GOLD → بدون كسور
 if "XAU" in symbol or "GOLD" in symbol:
     return str(round(value))
 
-# BTC
+# BTC → بدون كسور
 if "BTC" in symbol:
     return str(round(value))
 
 return str(value)
+================= RR =================
 
 def calc_rr(entry, sl, tp1):
 
@@ -55,10 +63,13 @@ try:
 
 except:
     return None
+================= HOME =================
 
 @app.route("/")
 def home():
 return "Webhook Bot Running"
+
+================= WEBHOOK =================
 
 @app.route("/webhook", methods=["POST"])
 def webhook():
@@ -134,6 +145,7 @@ TP3: {tp3}
 send_telegram(msg)
 
 return jsonify({"status": "ok"})
+================= RUN SERVER =================
 
 if name == "main":
 app.run(host="0.0.0.0", port=10000)
