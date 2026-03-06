@@ -7,8 +7,6 @@ CHAT_ID = os.getenv("CHAT_ID")
 
 app = Flask(name)
 
-================= TELEGRAM =================
-
 def send_telegram(msg):
 url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
 requests.post(url, data={
@@ -16,41 +14,27 @@ requests.post(url, data={
 "text": msg
 })
 
-================= PRICE FORMAT =================
-
 def format_price(value, symbol):
-
-if value is None:
-    return None
-
 try:
-    value = float(value)
+value = float(value)
+symbol = str(symbol).upper()
+
+    if "XAG" in symbol:
+        return f"{value:.2f}"
+
+    if "BTC" in symbol or "XAU" in symbol:
+        return str(round(value))
+
+    return str(value)
+
 except:
     return value
 
-symbol = str(symbol).upper()
-
-# SILVER → رقمين عشريين
-if "XAG" in symbol or "SILVER" in symbol:
-    return f"{value:.2f}"
-
-# GOLD → بدون كسور
-if "XAU" in symbol or "GOLD" in symbol:
-    return str(round(value))
-
-# BTC → بدون كسور
-if "BTC" in symbol:
-    return str(round(value))
-
-return str(value)
-================= RR =================
-
 def calc_rr(entry, sl, tp1):
-
 try:
-    entry = float(entry)
-    sl = float(sl)
-    tp1 = float(tp1)
+entry = float(entry)
+sl = float(sl)
+tp1 = float(tp1)
 
     risk = abs(entry - sl)
     reward = abs(tp1 - entry)
@@ -63,27 +47,15 @@ try:
 
 except:
     return None
-================= HOME =================
 
 @app.route("/")
 def home():
 return "Webhook Bot Running"
 
-================= WEBHOOK =================
-
 @app.route("/webhook", methods=["POST"])
 def webhook():
 
-data = request.get_json(silent=True)
-
-if data is None:
-    data = request.form.to_dict()
-
-if not data:
-    try:
-        data = eval(request.data.decode())
-    except:
-        data = {}
+data = request.json
 
 print("Incoming:", data)
 
@@ -93,7 +65,7 @@ signal = data.get("signal") or data.get("side")
 if not symbol or not signal:
     return jsonify({"status": "ignored"})
 
-entry_raw = data.get("price") or data.get("entry")
+entry_raw = data.get("entry") or data.get("price")
 sl_raw = data.get("sl")
 tp1_raw = data.get("tp1")
 tp2_raw = data.get("tp2")
@@ -107,26 +79,12 @@ tp3 = format_price(tp3_raw, symbol)
 
 rr = calc_rr(entry_raw, sl_raw, tp1_raw)
 
-distance = None
-
-try:
-    if entry_raw and tp1_raw:
-        distance_val = abs(float(tp1_raw) - float(entry_raw))
-        distance = format_price(distance_val, symbol)
-except:
-    distance = None
-
 msg = f"""
 
 📊 {symbol}
 
 🔥 Signal: {signal}
 💰 Entry: {entry}
-"""
-
-if signal.upper() != "EXIT":
-
-    msg += f"""
 
 🎯 Targets
 TP1: {tp1}
@@ -136,16 +94,12 @@ TP3: {tp3}
 🛑 Stop Loss: {sl}
 """
 
-    if rr is not None:
-        msg += f"\n📈 RR: 1 : {rr}"
-
-    if distance is not None:
-        msg += f"\n💎 TP1 Distance: {distance}"
+if rr:
+    msg += f"\n📈 RR: 1 : {rr}"
 
 send_telegram(msg)
 
 return jsonify({"status": "ok"})
-================= RUN SERVER =================
 
 if name == "main":
 app.run(host="0.0.0.0", port=10000)
