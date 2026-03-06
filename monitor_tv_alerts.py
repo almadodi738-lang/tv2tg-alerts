@@ -12,29 +12,37 @@ url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
 requests.post(url, data={"chat_id": CHAT_ID, "text": msg})
 
 def format_price(value, symbol):
+
 if value is None:
-return None
+    return None
+
 try:
-value = float(value)
+    value = float(value)
 except:
-return value
+    return value
 
 symbol = str(symbol).upper()
 
+# SILVER → رقمين عشريين
 if "XAG" in symbol or "SILVER" in symbol:
     return f"{value:.2f}"
+
+# GOLD
 if "XAU" in symbol or "GOLD" in symbol:
     return str(round(value))
+
+# BTC
 if "BTC" in symbol:
     return str(round(value))
 
 return str(value)
 
 def calc_rr(entry, sl, tp1):
+
 try:
-entry = float(entry)
-sl = float(sl)
-tp1 = float(tp1)
+    entry = float(entry)
+    sl = float(sl)
+    tp1 = float(tp1)
 
     risk = abs(entry - sl)
     reward = abs(tp1 - entry)
@@ -44,6 +52,7 @@ tp1 = float(tp1)
 
     rr = reward / risk
     return round(rr, 2)
+
 except:
     return None
 
@@ -64,6 +73,8 @@ if not data:
         data = eval(request.data.decode())
     except:
         data = {}
+
+print("Incoming:", data)
 
 symbol = data.get("symbol")
 signal = data.get("signal") or data.get("side")
@@ -86,6 +97,7 @@ tp3 = format_price(tp3_raw, symbol)
 rr = calc_rr(entry_raw, sl_raw, tp1_raw)
 
 distance = None
+
 try:
     if entry_raw and tp1_raw:
         distance_val = abs(float(tp1_raw) - float(entry_raw))
@@ -102,6 +114,7 @@ msg = f"""
 """
 
 if signal.upper() != "EXIT":
+
     msg += f"""
 
 🎯 Targets
