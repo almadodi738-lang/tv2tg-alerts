@@ -23,11 +23,15 @@ def format_price(value, symbol):
         symbol = str(symbol).upper()
 
         # الفضة رقمين عشريين
-        if "XAG" in symbol:
+        if "XAG" in symbol or "SILVER" in symbol:
             return f"{value:.2f}"
 
-        # الذهب والبتكوين بدون كسور
-        if "BTC" in symbol or "XAU" in symbol:
+        # الذهب بدون كسور
+        if "XAU" in symbol or "GOLD" in symbol:
+            return str(round(value))
+
+        # البتكوين بدون كسور
+        if "BTC" in symbol:
             return str(round(value))
 
         return str(value)
