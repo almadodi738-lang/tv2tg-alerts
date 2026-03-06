@@ -22,9 +22,11 @@ def format_price(value, symbol):
         value = float(value)
         symbol = str(symbol).upper()
 
+        # الفضة رقمين عشريين
         if "XAG" in symbol:
             return f"{value:.2f}"
 
+        # الذهب والبتكوين بدون كسور
         if "BTC" in symbol or "XAU" in symbol:
             return str(round(value))
 
@@ -32,6 +34,7 @@ def format_price(value, symbol):
 
     except:
         return value
+
 
 def calc_rr(entry, sl, tp1):
     try:
@@ -46,14 +49,21 @@ def calc_rr(entry, sl, tp1):
             return None
 
         rr = reward / risk
+
+        # إذا كانت أقل من 1 نعكسها ليكون الربح أكبر من المخاطرة
+        if rr < 1:
+            rr = 1 / rr
+
         return round(rr, 2)
 
     except:
         return None
 
+
 @app.route("/")
 def home():
     return "Webhook Bot Running"
+
 
 @app.route("/webhook", methods=["POST"])
 def webhook():
