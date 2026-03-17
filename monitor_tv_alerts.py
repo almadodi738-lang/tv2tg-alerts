@@ -17,17 +17,18 @@ def send_telegram(msg):
         }
     )
 
-def format_price(value, symbol):
+def format_price(value, symbol, market=""):
     try:
         value = float(value)
         symbol = str(symbol).upper()
+        market = str(market).upper()
 
         # الفضة رقمين عشريين
-        if "XAG" in symbol or "SILVER" in symbol:
+        if "XAG" in symbol or "SILVER" in symbol or market == "SILVER":
             return f"{value:.2f}"
 
         # الذهب بدون كسور
-        if "XAU" in symbol or "GOLD" in symbol:
+        if "XAU" in symbol or "GOLD" in symbol or market == "GOLD":
             return str(round(value))
 
         # البتكوين بدون كسور
@@ -54,7 +55,6 @@ def calc_rr(entry, sl, tp1):
 
         rr = reward / risk
 
-        # إذا كانت أقل من 1 نعكسها ليكون الربح أكبر من المخاطرة
         if rr < 1:
             rr = 1 / rr
 
@@ -71,12 +71,12 @@ def home():
 
 @app.route("/webhook", methods=["POST"])
 def webhook():
-
     data = request.json
 
     print("Incoming:", data)
 
     symbol = data.get("symbol")
+    market = data.get("market", "")
     signal = data.get("signal") or data.get("side")
 
     if not symbol or not signal:
@@ -88,17 +88,16 @@ def webhook():
     tp2_raw = data.get("tp2")
     tp3_raw = data.get("tp3")
 
-    entry = format_price(entry_raw, symbol)
-    sl = format_price(sl_raw, symbol)
-    tp1 = format_price(tp1_raw, symbol)
-    tp2 = format_price(tp2_raw, symbol)
-    tp3 = format_price(tp3_raw, symbol)
+    entry = format_price(entry_raw, symbol, market)
+    sl = format_price(sl_raw, symbol, market)
+    tp1 = format_price(tp1_raw, symbol, market)
+    tp2 = format_price(tp2_raw, symbol, market)
+    tp3 = format_price(tp3_raw, symbol, market)
 
     rr = calc_rr(entry_raw, sl_raw, tp1_raw)
 
     msg = f"""
-
-📊 {symbol}
+📊 {market or symbol}
 
 🔥 Signal: {signal}
 💰 Entry: {entry}
