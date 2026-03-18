@@ -109,9 +109,19 @@ TP3: {tp3}
         return jsonify({"status": "ok", "type": "signal", "telegram_status": tg.status_code})
 
     if event:
+        event_labels = {
+            "TP1": "🎯 Take Profit 1",
+            "TP2": "🎯 Take Profit 2",
+            "TP3": "🎯 Take Profit 3",
+            "SL": "🛑 Stop Loss Hit",
+            "EXIT_OPPOSITE": "🔄 Exit On Opposite Signal"
+        }
+
+        event_text = event_labels.get(event, f"⚡ Event: {event}")
+
         msg = f"""📊 {market or symbol}
 
-⚡ Event: {event}"""
+{event_text}"""
 
         tg = send_telegram(msg)
         return jsonify({"status": "ok", "type": "event", "telegram_status": tg.status_code})
