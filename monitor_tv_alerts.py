@@ -1,4 +1,5 @@
 import os
+import time
 import requests
 from flask import Flask, request, jsonify
 
@@ -6,6 +7,9 @@ BOT_TOKEN = os.getenv("BOT_TOKEN")
 CHAT_ID = os.getenv("CHAT_ID")
 
 app = Flask(__name__)
+
+recent_alerts = {}
+DUPLICATE_WINDOW = 20  # seconds
 
 def send_telegram(msg):
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
@@ -58,6 +62,19 @@ def calc_rr(entry, sl, tp1):
     except:
         return None
 
+def is_duplicate(alert_key):
+    now = time.time()
+
+    expired = [k for k, ts in recent_alerts.items() if now - ts > DUPLICATE_WINDOW]
+    for k in expired:
+        del recent_alerts[k]
+
+    if alert_key in recent_alerts and now - recent_alerts[alert_key] <= DUPLICATE_WINDOW:
+        return True
+
+    recent_alerts[alert_key] = now
+    return False
+
 @app.route("/")
 def home():
     return "Webhook Bot Running"
@@ -90,6 +107,10 @@ def webhook():
 
         rr = calc_rr(entry_raw, sl_raw, tp1_raw)
 
+        alert_key = f"{symbol}|{market}|signal|{signal}|{entry}|{sl}|{tp1}"
+        if is_duplicate(alert_key):
+            return jsonify({"status": "ignored", "reason": "duplicate_signal"})
+
         msg = f"""📊 {market or symbol}
 
 🔥 Signal: {signal}
@@ -116,6 +137,10 @@ TP3: {tp3}
             "SL": "🛑 Stop Loss Hit",
             "EXIT_OPPOSITE": "🔄 Exit On Opposite Signal"
         }
+
+        alert_key = f"{symbol}|{market}|event|{event}"
+        if is_duplicate(alert_key):
+            return jsonify({"status": "ignored", "reason": "duplicate_event"})
 
         event_text = event_labels.get(event, f"⚡ Event: {event}")
 
